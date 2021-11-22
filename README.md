@@ -8,6 +8,47 @@ precise, easy and unambiguous. The language consists of two layers:
 
 # Language
 
+```
+t0 = ...
+
+t1 = ∀ { n : Int : n > 10 and n < 20, b : Bool }
+   . { inputs: utxoRefs              -- list of UTXO inputs
+     , outputs: utxos                -- list of UTXO outputs
+     , validator:
+        if b
+          then n < 12
+          else true
+     , effects: effect               -- list of effects produced by this transaction
+     , signatures: pubkey ↦ sig      -- map from pubkey hashes to transaction signatures
+     , range: (expr, expr)           -- time range, specified as a tuple of slot numbers
+     , ?fee: expr                    -- fee amount in Ada, optional field
+     }
+
+
+
+v1 =
+
+tCombined = ∀ (r : Bool) (g : Bool) (b : Bool)
+
+1. show equivalence between utxo validators + minting validators <=> transaction validators
+  v1 and v2 <=> txnValidator
+2. show equivalence between compositions of transaction validators <=> higher-level props
+  t15 = t1 r -> t2 r -> (t3 r | t4) -> t5 :: forall r@{x: int} . ( ... )
+  t16 = ...
+
+  t15 -> t16 :: forall . (stuff I want) and not (stuff I don't want)
+
+  forall (t : Transaction) .
+    {
+      inputs: t.outputs[i],
+      outputs:
+        { validator: ..., value: ..., datum: ... }
+      validator: (v t.ouputs[1]) and ...
+    }
+
+v = \{address,...} -> ...
+```
+
 Our first-order speccing language:
 
 ```
@@ -19,7 +60,8 @@ rules ::=
   | rule
 
 rule ::=
-    txn -> txn                      -- transaction sequencing
+    txn -> txn                      -- sequential composition
+  | ( txn | txn )                   -- parallel composition
 
 txn ::=
   T =                               -- transaction binding
@@ -30,7 +72,7 @@ txn ::=
     , effects: effect               -- list of effects produced by this transaction
     , signatures: pubkey ↦ sig      -- map from pubkey hashes to transaction signatures
     , range: (expr, expr)           -- time range, specified as a tuple of slot numbers
-    , ?forge: expr
+    , ?forge: expr                  -- tokens to mint
     , ?fee: expr                    -- fee amount in Ada, optional field
     }
 
@@ -55,7 +97,8 @@ utxos ::=
 utxo ::=
   {
   , address: ?pubkey                -- for pubkey payments
-  , value[φ]: expr
+  , validator: ?expr                -- validator scripts
+  , value[φ,tok]: expr
   , datum: (expr : τ)
   , pubkey
   }
@@ -69,8 +112,8 @@ validator-def ::=
     v = validator
 
 effect ::=
-    mint φ expr                     -- mint expr tokens under minting policy φ
-  | burn φ expr                     -- burn expr tokens under minting policy φ
+    mint φ tok expr                 -- mint expr tokens under minting policy φ
+  | burn φ tok expr                 -- burn expr tokens under minting policy φ
   | effect , effect
 
 policy ::=
@@ -105,7 +148,6 @@ expr ::=
   | [τ]                             -- lists
   | (τ, τ)                          -- type conjunction
   | C τ \/ C τ                      -- type disjunction / variants
-  | Transaction
 
 rulename ::= x
 
@@ -122,6 +164,7 @@ with the following meta-variables:
     C ranges over data constructor names
     x ranges over variable names (a-z, A-Z, 0-9, _)
     txn is a built-in variable that references the currently pending transaction in a validator expression
+    tok ranges over token names
     pubkey ranges over public key hashes
     sig ranges over signatures
     slot ranges over block numbers
