@@ -3,7 +3,7 @@
 The motivation for this language is to make plutus specifications, rigorous,
 precise, easy and unambiguous. The language consists of two layers:
 
-  1. a UXTO-level specification
+  1. a UTXO-level specification
   2. higher-level compositions of lower-level specs through abstraction and application
 
 # Language
@@ -68,7 +68,7 @@ txn ::=
     quantifier-list .               -- variable bindings, including redeemer inputs
     { inputs: utxoRefs              -- list of UTXO inputs
     , outputs: utxos                -- list of UTXO outputs
-    , validator: validator          -- validator
+    , txvalidator: txvalidator      -- txvalidator
     , effects: effect               -- list of effects produced by this transaction
     , signatures: pubkey ↦ sig      -- map from pubkey hashes to transaction signatures
     , range: (expr, expr)           -- time range, specified as a tuple of slot numbers
