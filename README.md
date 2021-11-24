@@ -53,35 +53,37 @@ Our first-order speccing language:
 
 ```
 spec ::=
-  σ = rules                         -- assignment
+  txn-def*
+  validator-def*
 
-rules ::=
-    rules , rules                   --
-  | rule
+-- transactions
 
-rule ::=
-    txn -> txn                      -- sequential composition
-  | ( txn | txn )                   -- parallel composition
+txn-def ::=
+    T = txn-expr                      -- transaction binding
 
-txn ::=
-  T =                               -- transaction binding
-    quantifier-list .               -- variable bindings, including redeemer inputs
-    { inputs: utxoRefs              -- list of UTXO inputs
-    , outputs: utxos                -- list of UTXO outputs
-    , txvalidator: txvalidator      -- txvalidator
-    , effects: effect               -- list of effects produced by this transaction
-    , signatures: pubkey ↦ sig      -- map from pubkey hashes to transaction signatures
-    , range: (expr, expr)           -- time range, specified as a tuple of slot numbers
-    , ?forge: expr                  -- tokens to mint
-    , ?fee: expr                    -- fee amount in Ada, optional field
-    }
+txn-expr ::=
+    abs . txn-expr                    -- transaction abstraction
+  | quantifier-list .                 -- variable introduction, including redeemer inputs
+      { inputs: utxoRefs              -- list of UTXO inputs
+      , outputs: utxos                -- list of UTXO outputs
+      , effects: effect               -- list of effects produced by this transaction
+      , signatures: pubkey ↦ sig      -- map from pubkey hashes to transaction signatures
+      , range: (expr, expr)           -- time range, specified as a tuple of slot numbers
+      , ?forge: expr                  -- tokens to mint
+      , ?fee: expr                    -- fee amount in Ada, optional field
+      }
+  | txn-comp -> txn-comp              -- sequential composition
+  | ( txn-comp | txn-comp )           -- parallel composition
+  | txn-expr : validator-expr         -- transaction validation
+  | T                                 -- transaction variables
+
+abs ::=
+  λ(U : UTXO)* (T : Transaction)* (x : τ : ?expr)*    -- abstraction over transactions, utxos or values
 
 quantifier-list ::=
-  ∀ binders
+  ∀ (x : τ : ?expr)*
 
-binders ::=
-    (x : τ : ?expr)
-  | binders binders
+-- UTXOs
 
 utxoRefs ::=
     T.outputs[i]                    -- reference a utxo output from a previously defined transaction
@@ -98,35 +100,42 @@ utxo ::=
   {
   , address: ?pubkey                -- for pubkey payments
   , validator: ?expr                -- validator scripts
-  , value[φ,tok]: expr
+  , value: φ,tok ↦ expr             -- token bundle
   , datum: (expr : τ)
   , pubkey
   }
 
-validator ::=
-    quantifier-list . expr          -- validator abstraction
-  | validator x                     -- validator application
-  | v
-
 validator-def ::=
-    v = validator
+    v = validator-expr              -- validator definition
+
+validator-expr ::=
+  | abs . validator-expr            -- validator abstraction
+  | validator x                     -- validator application to values
+  | validator T                     -- validator application to transactions
+  | validator U                     -- validator application to utxos
+  | v                               -- validator variable
+  | expr                            -- (boolean) expression
 
 effect ::=
     mint φ tok expr                 -- mint expr tokens under minting policy φ
   | burn φ tok expr                 -- burn expr tokens under minting policy φ
-  | effect , effect
+  | effect , effect                 -- effect sequencing
 
 policy ::=
-  φ = expr                          -- spec for a minting policy
+  φ = quantifier-list . expr        -- spec for a minting policy
 
 policy-id ::= φ
 
 expr ::=
     x                               -- var
+  | T                               -- transaction variable
+  | T.outputs[i]                    -- UTXO reference
+  | expr.datum                      -- where expr evaluates to a UTXO
   | quantifiers . expr              -- abstraction
   | expr expr                       -- application
   | expr + expr                     -- arithmetic
   | expr - expr
+  | validator-expr                  -- use of other validators
   | ...
   | expr <> expr
   | expr and expr                   -- logical operators
@@ -138,6 +147,7 @@ expr ::=
   | ( expr )                        -- grouping
   | "..."                           -- string literals
   | [0-9]+                          -- integer literals
+  | r@{ l1: expr, ..., ln: expr }   -- row expression
   | any                             -- any value (of any type)
 
 τ ::=
@@ -148,6 +158,9 @@ expr ::=
   | [τ]                             -- lists
   | (τ, τ)                          -- type conjunction
   | C τ \/ C τ                      -- type disjunction / variants
+  | rt@{ l1: τ, ..., ln: τ }        -- row expression
+  | Transaction                     -- transaction types
+  | UTXO                            -- UTXO types
 
 rulename ::= x
 
@@ -157,12 +170,16 @@ string-literals ::= "..."
 with the following meta-variables:
 
     σ ranges over specifications
-    T ranges over transactions
+    T ranges over transaction variables
+    U ranges over UTXO variables
     α ranges over addresses
     τ ranges over types
+    r ranges over row variables
+    rt ranges over row type variables
     φ ranges over minting policies and indicates the type of token
     C ranges over data constructor names
     x ranges over variable names (a-z, A-Z, 0-9, _)
+    i ranges over positive integers
     txn is a built-in variable that references the currently pending transaction in a validator expression
     tok ranges over token names
     pubkey ranges over public key hashes
