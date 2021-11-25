@@ -98,11 +98,14 @@ utxos ::=
 
 utxo ::=
   {
-  , address: ?pubkey                -- for pubkey payments
-  , validator: ?expr                -- validator scripts
+  , validator: expr                -- validator scripts
   , value: φ,tok ↦ expr             -- token bundle
   , datum: (expr : τ)
-  , pubkey
+  }
+  |
+  {
+  , pubkey: pubkey                -- for pubkey payments
+  , value: φ,tok ↦ expr             -- token bundle
   }
 
 validator-def ::=
