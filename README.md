@@ -12,7 +12,7 @@ precise, easy and unambiguous. The language consists of two layers:
 t0 = ...
 
 t1 = ∀ { n : Int : n > 10 and n < 20, b : Bool }
-   . { inputs: utxoRefs              -- list of UTXO inputs
+   . { inputs: utxos                 -- list of UTXO inputs
      , outputs: utxos                -- list of UTXO outputs
      , validator:
         if b
@@ -64,7 +64,7 @@ txn-def ::=
 txn-expr ::=
     abs . txn-expr                    -- transaction abstraction
   | quantifier-list .                 -- variable introduction, including redeemer inputs
-      { inputs: utxoRefs              -- list of UTXO inputs
+      { inputs: utxos                 -- list of UTXO inputs
       , outputs: utxos                -- list of UTXO outputs
       , effects: effect               -- list of effects produced by this transaction
       , signatures: pubkey ↦ sig      -- map from pubkey hashes to transaction signatures
@@ -84,12 +84,6 @@ quantifier-list ::=
   ∀ (x : τ : ?expr)*
 
 -- UTXOs
-
-utxoRefs ::=
-    T.outputs[i]                    -- reference a utxo output from a previously defined transaction
-  | utxoRefs , utxoRefs
-  | ?utxoRefs
-  | utxos
 
 utxos ::=
     utxos , utxos
