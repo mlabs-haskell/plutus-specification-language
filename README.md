@@ -69,11 +69,10 @@ txn-expr ::=
       , effects: effect               -- list of effects produced by this transaction
       , signatures: pubkey ↦ sig      -- map from pubkey hashes to transaction signatures
       , range: (expr, expr)           -- time range, specified as a tuple of slot numbers
-      , ?forge: expr                  -- tokens to mint
       , ?fee: expr                    -- fee amount in Ada, optional field
       }
-  | txn-comp -> txn-comp              -- sequential composition
-  | ( txn-comp | txn-comp )           -- parallel composition
+  | txn-expr -> txn-expr              -- sequential composition
+  | ( txn-expr | txn-expr )           -- parallel composition
   | txn-expr : validator-expr         -- transaction validation
   | T                                 -- transaction variables
 
@@ -92,14 +91,9 @@ utxos ::=
 
 utxo ::=
   {
-  , validator: expr                -- validator scripts
+  , address: expr                -- validator scripts
   , value: φ,tok ↦ expr             -- token bundle
-  , datum: (expr : τ)
-  }
-  |
-  {
-  , pubkey: pubkey                -- for pubkey payments
-  , value: φ,tok ↦ expr             -- token bundle
+  , ?datum: (expr : τ)
   }
 
 validator-def ::=
