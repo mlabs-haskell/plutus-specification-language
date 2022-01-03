@@ -93,3 +93,18 @@ t0 = ∀ (indatum : ???) (inaddr : Address) (give : Value) (take : Value) (key :
   fee: FIXME
 }
 ```
+
+## What we really want
+
+MAX = 14 KiB
+
+- For any UTXO locked with our script and a datum of the correct format of size less than MAX,
+  if we know the private key that corresponds to the public key hash in its datum,
+    then we must be able to consume it iff we can pay the fees.
+    else we must be able to consume it iff we pay the value specified
+      to the public key hash specified and are able to pay the fees.
+- For any UTXOs locked with our script and a datum of the correct format, if we are able to consume them
+  individually, we must be able to consume them together if they fit within
+  the transaction limits.
+
+How do we specify this?
