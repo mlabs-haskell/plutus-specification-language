@@ -1,5 +1,8 @@
 module PSL
 
+import Data.List
+import Data.List.Elem
+
 %default total
 
 data ByteString : Type where
@@ -13,6 +16,19 @@ data Data : Type where
 
 data PubKeyHash : Type where
 
+data Hash : Type where
+
+data ScriptContext : Type where
+
+data Script : Type where
+  MkScript : (f : Data -> Data -> ScriptContext -> Bool) -> Script
+
+scriptHash : Script -> Hash
+scriptHash = ?scriptHashjjj
+
+scriptEquality : (f : Script) -> (g : Script) -> (scriptHash f === scriptHash g) -> (f === g)
+scriptEquality = ?scriptEqualityjj
+
 data ScriptAddress : Type where
 
 data Datum : Type where
@@ -24,6 +40,8 @@ data TokenName : Type where
 
 data Value : Type where
   MkValue : List (CurrencySymbol, (List (TokenName, Integer))) -> Value
+
+Address = Either PubKeyHash ScriptAddress
 
 record TxOut where
   datum : Maybe Datum
@@ -41,7 +59,6 @@ data TxCombination : Type where
   EmptyTx    : TxCombination
   PureTx     : TxInfo -> TxCombination 
   SerialTx   : TxCombination -> TxCombination -> TxCombination
-  ReallySerialTx   : (x : TxCombination) -> (y : TxCombination) -> ((compile x).outputs <-> (compile y).inputs === (Nil,Nil)) -> TxCombination
   ParallelTx : TxCombination -> TxCombination -> TxCombination
   --ChoiceTx   : TxCombination -> TxCombination -> TxCombination
   PredicateTx : TxCombination -> Bool -> TxCombination
@@ -76,12 +93,6 @@ compile (SerialTx x y) =
     inputs = (compile x).inputs <+> inputs,
     outputs = outputs <+> (compile y).outputs
   }
-compile (ReallySerialTx x y) =
-  let (outputs, inputs) = (compile x).outputs <-> (compile y).inputs in
-  MkTxEffect {
-    inputs = (compile x).inputs <+> inputs,
-    outputs = outputs <+> (compile y).outputs
-  }
 compile (ParallelTx x y) =
   MkTxEffect {
     inputs = (compile x).inputs <+> (compile y).inputs,
@@ -99,28 +110,97 @@ checkCombination (SerialTx x y) = checkCombination x && checkCombination y
 checkCombination (ParallelTx x y) = checkCombination x && checkCombination y
 checkCombination (PredicateTx x p) = checkCombination x == p
 
-
 -- Example
-validChess : TxOut -> Type
-validChess = ?vc
+
+data ChessColor = Black | White
 
 exampleScript : ScriptAddress
 exampleScript = ?hy
 
+hasChessBoard : Datum -> Type 
+hasChessBoard (MkDatum jdawd) = ?hasChessBoardHole  -- something something data has field that is something serialised 
+
+hasNextPlayer : Datum -> Type
+hasNextPlayer = ?hasNextPlayerhole -- unsure what this is supposed to be 
+
+validDatum : Datum -> Type
+validDatum dat = (hasChessBoard dat, hasNextPlayer dat)
+
+-- (<) : Integer -> Integer -> Bool
+
 validExample : TxOut -> Type
 validExample utxo = 
-  DPair CurrencySymbol $ 
-    \cs => DPair TokenName $ 
-      \tn => DPair Integer $ 
-        \amount => ((amount < 1_000_000_000) === True, utxo.address === Right exampleScript, utxo.value === MkValue [(cs, [(tn, amount)])])
+  DPair CurrencySymbol $ \cs =>
+  DPair TokenName $ \tn =>
+  DPair Integer $ \amount => 
+  DPair Datum $ \datum =>
+    ( validDatum datum 
+    , utxo.datum === Just datum
+    , (amount < 1_000_000_000) === True
+    , utxo.address === Right exampleScript
+    , utxo.value === MkValue [(cs, [(tn, amount)])]
+    )
 
-example : (utxo : DPair TxOut PSL.validExample) -> TxCombination
-example = ?jx
+feeInput : TxOut
+feeInput = ?xufhiawfh
 
-allExample : (utxo : _) -> (PSL.checkCombination (PSL.example utxo) === True)
-allExample = ?oj
+example : TxOut -> TxOut -> TxOut -> TxInfo
+example blackUtxo whiteUtxo chessUtxo = MkTxInfo
+  { inputs = 
+    [ chessUtxo
+    , case ?chessColor chessUtxo of
+        Black => blackUtxo
+        White => whiteUtxo
+    , feeInput
+    ]
+  , outputs =
+    [ ?progressChessUtxo (?findChessAction chessUtxo) chessUtxo
+    , case ?chessColor' chessUtxo of
+        Black => blackUtxo
+        White => whiteUtxo
+    ] 
+  , mint = ?mint
+  , signatures = ?sigs
+  }
+
+exampleProof : 
+     (blackUtxo : DPair TxOut ?validBlack) 
+  -> (whiteUtxo : DPair TxOut ?validWhite)
+  -> (chessUtxo : DPair TxOut PSL.validExample)
+  ->
+    let 
+      tx = example (fst blackUtxo) (fst whiteUtxo) (fst chessUtxo)
+    in
+    ( cardanoValidate tx === True
+    , Elem (fst whiteUtxo) tx.inputs)
 
 --tchess : TxInfo -> Type
 --tchess t = (utxo : TxOut) -> validChess utxo -> (t.inputs = Cons utxo Nil, t.outputs = Nil) -> cardanoValidate t = True
+
+----------------------------------------------------------------------------
+-- Specification of "there is a chain of transactions that let you withdraw"
 --
 
+chessUTXO : Type
+chessUTXO = DPair TxOut validExample
+
+withdraws : PSL.chessUTXO -> TxInfo -> Type
+withdraws (MkDPair utxo _ ) tx = DPair PubKeyHash $ \ wallet =>
+   ( Elem utxo tx.inputs
+   , Elem (?paid wallet (MkValue ?utxoValue)) tx.outputs
+   )
+
+validates : TxInfo -> Type
+validates utxo = cardanoValidate utxo === True
+
+nextUTXO : PSL.chessUTXO -> (tx : TxInfo) -> PSL.validates tx -> PSL.chessUTXO -> Type
+nextUTXO = ?nextutxojjj
+
+data EventuallyWithdraws : PSL.chessUTXO -> Type where
+  Step : (tx : TxInfo) -> (v : validates tx) -> (utxo' : PSL.chessUTXO)
+         -> (utxo : PSL.chessUTXO) -> PSL.nextUTXO utxo tx v utxo'
+         -> EventuallyWithdraws utxo'
+         -> EventuallyWithdraws utxo
+  Done : (tx : TxInfo) -> (v : validates tx)
+         -> PSL.withdraws utxo tx
+         -> EventuallyWithdraws utxo
