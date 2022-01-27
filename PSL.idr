@@ -63,6 +63,33 @@ data TxCombination : Type where
   --ChoiceTx   : TxCombination -> TxCombination -> TxCombination
   PredicateTx : TxCombination -> Bool -> TxCombination
 
+---- Marlowe in types ----
+
+data MarloweContract : Type where
+  Close : MarloweContract
+  Let : ValueExpression -> (Value -> Contract) -> Contract
+  If : Observation -> MarloweContract -> MarloweContract -> MarloweContract
+  When : [(MarloweAction, MarloweContract)] -> Timeout -> MarloweContract -> MarloweContract
+  Pay : Account -> Account -> Value -> MarloweContract -> MarloweContract
+
+-- data Value
+
+data TransactionInput : a -> Type where
+  Choice : Account -> Integer -> TransactionInput Integer
+  Deposit : Account -> Value -> TransactionInput Value
+  Notify : Observation a -> TransactionInput a -- waits for the observation to be true
+
+data ValueExpression
+
+data Observation
+
+data Account
+
+data Timeout : Type where
+  Timeout : Integer -> Timeout
+
+---- end Marlowe ----
+
 record TxEffect where
   constructor MkTxEffect
   inputs : List TxOut
@@ -197,6 +224,7 @@ nextUTXO : PSL.chessUTXO -> (tx : TxInfo) -> PSL.validates tx -> PSL.chessUTXO -
 nextUTXO = ?nextutxojjj
 
 data EventuallyWithdraws : PSL.chessUTXO -> Type where
+
   Step : (tx : TxInfo) -> (v : validates tx) -> (utxo' : PSL.chessUTXO)
          -> (utxo : PSL.chessUTXO) -> PSL.nextUTXO utxo tx v utxo'
          -> EventuallyWithdraws utxo'
@@ -204,3 +232,60 @@ data EventuallyWithdraws : PSL.chessUTXO -> Type where
   Done : (tx : TxInfo) -> (v : validates tx)
          -> PSL.withdraws utxo tx
          -> EventuallyWithdraws utxo
+
+-- :D
+
+-------------------------------------------------------------------------------
+-- Specification Stable-Coin
+--
+--
+-- We have the concepts of vaults. If you put in collateral, you get out the
+-- stablecoin. If you put in the stablecoin, you get out the collateral.
+-- In the real world, the ratio between these are determined by an oracle.
+-- For our use case, we assume that the ratio is fixed, such that liquidations are not
+-- necessary.
+--
+-- At a UTXO level, we have 2 minting policies and 1 validator.
+-- The minting policy Vm allows minting tokens iff those tokens are locked by the validator V.
+-- The minting policy S allows minting tokens iff there is an input locked by the validator V.
+-- The validator V only allows consumption iff:
+-- - There is exactly one output with the token for Vm, where the output is locked by V again.
+-- - The amount of S minted/burned is the difference in the amount of collateral locked by the input vault
+--   and output vault, multiplied by the ratio r.
+--
+-- OLD:
+--
+-- The vault can hold collateral and mint currency when given collateral.
+-- If you give the vault the currency back, you will get a corresponding amount of
+-- collateral back. The currency will be burned.
+-- There is a (fixed in this case) ratio between the collateral and the currency.
+-- The global ratio between the collateral and currency that exist in the set of live UTXOs,
+-- should be maintained.
+
+-- assume ratioCollateral does not change (much?)
+-- assume we have 1 vault
+-- baseCase      : 
+--   ratioCollateral * (0 collateral) === 0 currency -- True
+-- inductiveCase : 
+--   assume (prevCollateralValue + ratioCollateral * Y) Collateral === (prevCurrencyVal + Y) Currency
+--   prove for (Y+1) 
+
+data Ledger : Type where
+  MkLedger : List (Valid TxOut) -> Ledger
+
+-- we have a MP (called m) that produces a Token that is always locked with a specifc Script (called s) 
+
+hasToken : TxOut -> Type
+hasToken utxo = ?hasToken
+
+isAtAddress : ScriptAddress -> TxOut -> Type
+isAtAddress scr utxo = utxo.address === Right scr
+ 
+all : (A -> Type) -> List A -> Type
+all P xs = (x : A) -> Elem x xs -> P x
+
+tokenStaysAtAddress : ScriptAddress -> TxInfo -> Type
+tokenStaysAtAddress scr tx = 
+   all (\ utxo => hasToken utxo -> isAtAddress scr utxo) (tx.inputs)
+   -> all (\ utxo => hasToken utxo -> isAtAddress scr utxo) (tx.outputs)
+
