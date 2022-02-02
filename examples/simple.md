@@ -60,7 +60,6 @@ MyRedeemer = {value : Value, pkh : PubKeyHash}
 thevalidator = λ(datum : MyDatum) (redeemer : MyRedeemer) (purpose : ScriptPurpose) (tx : TxInfo).
   any (λ(x : PubKeyHash). x == datum.pkh) tx.signatories or
     case ctx.purpose of
-      _ -> False
       Spending myref ->
         let f = λ(out : UTXO)
             out.address == { credential = PubKeyCredential datum.pkh, stakingCredential = Nothing }
@@ -68,6 +67,7 @@ thevalidator = λ(datum : MyDatum) (redeemer : MyRedeemer) (purpose : ScriptPurp
             and out.value == value
         in
         any f ctx.info.outputs
+      _ -> False
 
 t0 = ∀ (indatum : ???) (inaddr : Address) (give : Value) (take : Value) (key : PubKeyHash). {
   inputs:
