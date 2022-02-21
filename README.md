@@ -69,6 +69,9 @@ precise, easy and unambiguous. The language consists of two layers:
   1. a UTXO-level specification
   2. higher-level compositions of lower-level specs through abstraction and application
 
+![Layered proof architecture diagram](img/ProofArchitecture.svg)
+
+
 ## Language
 
 ```

@@ -1,0 +1,58 @@
+digraph ProofArchitecture {
+  rankdir = BT;
+
+  protocol_theorems
+  [shape = ellipse,
+   height = 1,
+   label = "protocol validity theorems"];
+
+  cardano_axioms
+  [shape = ellipse,
+   height = 1,
+   label = "cardano blockchain axioms"];
+
+  induction_library
+  [shape = ellipse,
+   height = 1,
+   label = "induction library"];
+
+  transaction_lemmas
+  [shape = ellipse,
+   height = 1,
+   label = "transaction lemmas"
+   ];
+
+  validator_lemmas
+  [shape = ellipse,
+   height = 1,
+   label = "validator script lemmas"
+   ];
+
+  minting_lemmas
+  [shape = ellipse,
+   height = 1,
+   label = "minting script lemmas"
+   ];
+
+  validator_code
+  [shape = box,
+   label = "validator script code"
+   ];
+
+  minting_code
+  [shape = box,
+   label = "minting script code"
+   ];
+
+  subgraph cluster {
+     minting_lemmas; validator_lemmas;
+     transaction_lemmas; protocol_theorems;
+     graph [ style = "dashed,rounded" ]
+  }
+
+  minting_code -> minting_lemmas [label = "Plutus prover"]
+  validator_code -> validator_lemmas [label = "Plutus prover"]
+  {minting_lemmas, validator_lemmas, cardano_axioms} -> transaction_lemmas
+  cardano_axioms -> induction_library
+  {transaction_lemmas, cardano_axioms, induction_library} -> protocol_theorems
+}
