@@ -44,10 +44,12 @@ digraph ProofArchitecture {
    label = "minting script code"
    ];
 
-  subgraph cluster {
+  subgraph cluster_spec {
      minting_lemmas; validator_lemmas;
      transaction_lemmas; protocol_theorems;
-     graph [ style = "dashed,rounded" ]
+     style = "dashed,rounded"
+     labelloc = "b"
+     label = "project specification"
   }
 
   minting_code -> minting_lemmas [label = "Plutus prover"]
