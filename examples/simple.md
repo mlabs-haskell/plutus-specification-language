@@ -108,3 +108,78 @@ MAX = 14 KiB
   the transaction limits.
 
 How do we specify this?
+
+## Proof layers
+
+One attempt sketch, following the [Proof Architecture diagram](../img/ProofArchitecture.svg).
+
+
+### Protocol Theorems
+
+Here's one way to specify the first bullet point of [What we really want]:
+
+```
+∀ (o :: UTxO SimpleDexDatum) (w :: Wallet) (s :: SigningKey).
+  o `LockedBy` SimpleDexValidator ∧ CanCoverAllFeesAndCollateral w ∧ o.datum.pkh `Witnesses` s ⇒
+    ∃ (t :: TxInfo).
+      t `IsSignedBySecret` s ∧ w `CoversFeesAndCollateralFor` t ∧ t `Disburses` o.value ∧ t `Spends` o
+
+∀ (o :: UTxO SimpleDexDatum) (w :: Wallet) (p :: PaymentPublicKey).
+  o `LockedBy` SimpleDexValidator ∧ CanCoverAllFeesAndCollateral w ∧ o.datum.pkh `IsHashOf` p ⇒
+    ∃ (t :: TxInfo).
+      PaysToPubKey t p o.datum.value ∧ w `CoversFeesAndCollateralFor` t ∧ t `Disburses` o.value ∧ t `Spends` o
+```
+
+The second bullet point is a bit awkwardly specified and hints at a
+semigroup-like property of transactions. We'd have to assume a theorem
+provided by the Induction Library (even if there's no induction involved in
+this particular case):
+
+```
+∀ (ts :: [Transaction]) (vs :: [SomeValidator]). All MindsOwnBusiness vs ⇒
+  All (\t-> All (InputsOf t) (\o-> Any (o `LockedBy`) vs)) ts ⇒
+    UnionOf ts `SpendsAll` Concat (InputsOf t)
+```
+
+Anyway for this simple validator the semigroup property is not necessary:
+
+- if the transaction is signed by our private key we can consume any number of
+  UTxO locked by the validator and specifying the corresponding public key hash,
+
+- else we must be able to consume any number of UTxOs locked by the validator
+  iff we pay the value specified to the public key hash specified by each and
+  are able to pay the fees.
+
+```
+∀ (os :: [UTxO SimpleDexDatum]) (w :: Wallet) (s :: SigningKey).
+  All (\o-> o `LockedBy` SimpleDexValidator ∧ o.datum.pkh `Witnesses` s) os ∧ CanCoverAllFeesAndCollateral w ⇒
+    ∃ (t :: TxInfo).
+      t `IsSignedBySecret` s ∧ w `CoversFeesAndCollateralFor` t
+      ∧ All (\o-> t `Disburses` o.value ∧ t `Spends` o) os
+
+∀ (ops :: [(UTxO SimpleDexDatum, PaymentPublicKey)]) (w :: Wallet).
+  All (\(o, p)-> o `LockedBy` SimpleDexValidator ∧ o.datum.pkh `IsHashOf` p) ops ∧ CanCoverAllFeesAndCollateral w ⇒
+    ∃ (t :: TxInfo).
+      w `CoversFeesAndCollateralFor` t
+      ∧ All (\(o, p)-> PaysToPubKey t p o.datum.value ∧ t `Disburses` o.value ∧ t `Spends` o) ops
+```
+
+### Validator Script Lemmas
+
+These are fairly simple, but should be checked against the actual validator
+code. Ideally in its final UPLC form and automatically.
+
+```
+∀ (o :: UTxO SimpleDexDatum) (t :: TxInfo).
+  ApprovesSpending SimpleDexValidator t o
+  ⟺ (t `IsSignedBy` o.datum.pkh ∨ PaysToPubKeyHash t o.datum.pkh o.datum.value)
+
+∀ (o :: UTxO SimpleDexDatum) (t :: TxInfo). o `LockedBy` SimpleDexValidator ⇒
+  t `Spends` o ⇒ (t `IsSignedBy` o.datum.pkh ∨ PaysToPubKeyHash t o.datum.pkh o.datum.value)
+```
+
+And of course we mustn't forget
+
+```
+MindsOwnBusiness SimpleDexValidator
+```
