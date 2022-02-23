@@ -111,12 +111,12 @@ How do we specify this?
 
 ## Proof layers
 
-One attempt sketch, following the [Proof Architecture diagram](../img/ProofArchitecture.svg).
+One attempt sketch, following the [Proof Architecture diagram](../README.md#general-design).
 
 
 ### Protocol Theorems
 
-Here's one way to specify the first bullet point of [What we really want]:
+Here's one way to specify the first bullet point of [what we really want](#what-we-really-want):
 
 ```
 ∀ (o :: UTxO SimpleDexDatum) (w :: Wallet) (s :: SigningKey).
@@ -163,6 +163,11 @@ Anyway for this simple validator the semigroup property is not necessary:
       w `CoversFeesAndCollateralFor` t
       ∧ All (\(o, p)-> PaysToPubKey t p o.datum.value ∧ t `Disburses` o.value ∧ t `Spends` o) ops
 ```
+
+### Transaction Lemmas
+
+... are really the same as protocol theorems here because in this simple
+protocol there's no dependency between transactions.
 
 ### Validator Script Lemmas
 
