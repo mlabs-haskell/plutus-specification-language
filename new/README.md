@@ -12,6 +12,22 @@ the *minted/burned* value, and a *validity range* (pair of time).
 Inputs and outputs contain value and are locked by a *protocol*.
 
 ```idris
+record UTXO where
+  constructor MkUTXO
+  protocol : ProtocolDef
+  value : Value
+  datum : protocol.datumType
+
+record TxIn where
+  constructor MkTxIn
+  utxo : UTXO
+  ref : Maybe UTXORef
+
+record TxOut where
+  constructor MkTxOut
+  utxo : UTXO
+  unique : Bool
+
 record Tx where
   constructor MkTx
   inputs : Set TxIn
@@ -39,8 +55,10 @@ record Protocol
   constructor MkProtocol
   def : ProtocolDef
   toPreserveType : datumType -> Type
+  assumeExists : datumType -> Type
   noOverlapProof : (x : permissibleType) -> (y : permissibleType) -> (tx : Tx) -> Not (txMatches def tx x, txMatches def tx y)
   reducibleProof : ?reducibleProofType
+  coverageProof : ?coverageProofType
 ```
 
 Let us now define transaction validity (we ignore protocol limits for this):
@@ -65,3 +83,16 @@ those two transactions can be combined in such a way that
 the combined transaction has the same effect (consumes
 the same UTXOs and outputs equivalent UTXOs), given
 that the signatures are also combined from both transactions.
+
+## Soundness of a protocol
+
+A protocol has the concept of *soundness*, which a protocol should adhere to
+if it is to be sensible rather than nonsensible.
+
+### Lack of overlap
+
+There must not be a transaction `t` that for protocol `p` validates
+with both `x : p.permissibleType` **and** `y : p.permissibleType` where `Not (x === y)`.
+This is a logical bug in the protocol.
+
+### Full coverage
