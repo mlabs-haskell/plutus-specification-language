@@ -26,7 +26,7 @@ record TxIn where
 record TxOut where
   constructor MkTxOut
   utxo : UTXO
-  unique : Bool
+  unique : Bool -- FIXME: Nonsense for an output locked by p in the context of p
 
 record Tx where
   constructor MkTx
