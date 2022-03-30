@@ -7,8 +7,8 @@ import Data.List.Elem
 
 record Set (a : Type) where
   constructor MkSet
-  b : Type
-  f : b -> a
+  indexType : Type
+  contents : indexType -> a
 
 ProtocolName : Type
 
@@ -67,10 +67,10 @@ data ListIn : List a -> List a -> Type where
 
 data ListFiltered : (a -> Type) -> List a -> List a -> Type where
   MkListFilteredNil : ListFiltered f Nil Nil
-  MkListFilteredCons : f h -> ListFiltered f xt yt -> ListFiltered f (h :: xt) (h :: yt)
-  MkListFilteredSkip : Not (f h) -> ListFiltered f xt y -> ListFiltered f (h :: xt) y
+  MkListFilteredCons : {0 f : a -> Type} -> f h -> ListFiltered f xt yt -> ListFiltered f (h :: xt) (h :: yt)
+  MkListFilteredSkip : {0 f : a -> Type} -> Not (f h) -> ListFiltered f xt y -> ListFiltered f (h :: xt) y
 
-lookup : a -> Map a b -> Maybe b
+lookupMap : a -> Map a b -> Maybe b
 
 -- fixme
 SetSubset : List a -> List a -> Type
@@ -79,24 +79,24 @@ ValueSubset : Value -> Value -> Type
 
 record Tx where
   constructor MkTx 
-  inputs : Set TxIn
+  inputs : List TxIn
   outputs : List UTXO
   mint : Value
-  signatures : Set PubKeyHash
+  signatures : List PubKeyHash
   validRange : TimeRange
 
 TxMatches : {p : ProtocolName} -> Tx -> TxDiagram p -> Type
 TxMatches tx d = 
   ( tx.validRange === d.validRange
   , ListIn d.inputs tx.inputs
-  , ListIn d.outputs tx.outputs
+  , ListIn (map (.utxo) d.outputs) tx.outputs
   , ValueSubset d.mint tx.mint
   , SetSubset d.signatures tx.signatures
-  , DPair f $ \f => (ListFiltered (\u => fst u === p) tx.inputs f, ListIn f d.inputs)
-  , DPair f $ \f => (ListFiltered (\u => fst u === p) tx.outputs f, ListIn f d.outputs)
-  , DPair f $ \f =>
-    DPair f' $ \f' =>
-    (lookup p tx.mint === f, lookup p d.mint === f', f === f')
+  , DPair (List TxIn) $ \f => (ListFiltered (\u => fst u.utxo === p) tx.inputs f, ListIn f d.inputs)
+  , DPair (List UTXO) $ \f => (ListFiltered (\u => fst u === p) tx.outputs f, ListIn f (map (.utxo) d.outputs))
+  , DPair _ $ \f =>
+    DPair _ $ \f' =>
+    (lookupMap p tx.mint === f, lookupMap p d.mint === f', f === f')
   )
 
 record Protocol where
@@ -119,8 +119,11 @@ sameProtocol :
 ReducibleProtocol : (p : Protocol) -> (UTXOFor (nameFor p) -> Type) -> Type
 DisjointProtocol : Protocol -> Type
 DisjointProtocol p =
-  (x : (permissible p).b) -> 
-  (y : (permissible p).b) -> (tx : Tx) -> Not (x === y) -> Not (TxMatches tx ((permissible p).f x), TxMatches tx ((permissible p).f y))
+  (x : (permissible p).indexType) ->
+  (y : (permissible p).indexType) ->
+  (tx : Tx) ->
+  Not (x === y) ->
+  Not (TxMatches tx ((permissible p).contents x), TxMatches tx ((permissible p).contents y))
 CoveredProtocol : Protocol -> Type
 
 record ProtocolSoundness (protocol : Protocol) where
