@@ -5,7 +5,15 @@ import Data.List.Elem
 
 %default total
 
+record Set (a : Type) where
+  constructor MkSet
+  b : Type
+  f : b -> a
+
 ProtocolName : Type
+
+Eq ProtocolName where
+  x == y = True
 
 datumType : ProtocolName -> Type
 
@@ -13,11 +21,11 @@ UTXORef : Type
 
 TokenName : Type
 
-Map : (x : Type) -> (x -> Type) -> Type
+PubKeyHash : Type
 
-Value' = Map TokenName (\_ => Integer)
+Map : Type -> Type -> Type
 
-Value = Map ProtocolName (\p => Value' p)
+Value = Map ProtocolName (Map TokenName Integer)
 
 record UTXOFor (p : ProtocolName) where -- UTXO *for a specific protocol*.
   constructor MkUTXOFor
@@ -37,7 +45,7 @@ record TxIn where
 record TxOut (context : ProtocolName) where
   constructor MkTxOut
   utxo : UTXO
-  unique : if context == (snd utxo).protocol then () else Bool
+  unique : if context == fst utxo then () else Bool
 
 TimeRange : Type
 
@@ -49,31 +57,25 @@ record TxDiagram (context : ProtocolName) where
   signatures : List PubKeyHash
   validRange : TimeRange
 
-data Subset : Type -> Type where
-  MakeSubset : (a : Type) -> (a -> Type) -> Subset a
+-- Order is important
+data ListIn' : List a -> List a -> Type where
+  MkListInNil : ListIn' Nil y
+  MkListInCons : ListIn' xt yt -> ListIn' (x :: xt) (y :: yt)
 
-{-
--- subset of two concrete lists? or should it be subset of types?
-data ListSubset : Type -> Type -> Type where
-  subset : 
-    (a : Type) -> 
-    (b : Type) ->
-    (sa : List a) ->
-    (sb : List b) ->      
-    (_ : \(x : a) => elem x sa -> elem x sb) ->
-    Subset a b
--}
+data ListIn : List a -> List a -> Type where
+  MkListInPrefix : ListIn' x y' -> ListIn x (y ++ y')
 
-ListSubset : Subset (List a) 
+data ListFiltered : (a -> Type) -> List a -> List a -> Type where
+  MkListFilteredNil : ListFiltered f Nil Nil
+  MkListFilteredCons : f h -> ListFiltered f xt yt -> ListFiltered f (h :: xt) (h :: yt)
+  MkListFilteredSkip : Not (f h) -> ListFiltered f xt y -> ListFiltered f (h :: xt) y
 
-ListFiltered : (a -> Type) -> List a -> List a -> Type
-
-lookup : (x : a) -> Map a b -> Maybe (b x) -- why (b x)?
+lookup : a -> Map a b -> Maybe b
 
 -- fixme
-SetSubset : Subset (List a)
+SetSubset : List a -> List a -> Type
 
-ValueSubset : Subset Value
+ValueSubset : Value -> Value -> Type
 
 record Tx where
   constructor MkTx 
@@ -86,26 +88,16 @@ record Tx where
 TxMatches : {p : ProtocolName} -> Tx -> TxDiagram p -> Type
 TxMatches tx d = 
   ( tx.validRange === d.validRange
-  , ListSubset d.inputs tx.inputs
-  , ListSubset d.outputs tx.outputs
+  , ListIn d.inputs tx.inputs
+  , ListIn d.outputs tx.outputs
   , ValueSubset d.mint tx.mint
   , SetSubset d.signatures tx.signatures
-  , DPair f $ \f => (ListFiltered (\u => fst u === p) tx.inputs f, ListSubset f d.inputs)
-  , DPair f $ \f => (ListFiltered (\u => fst u === p) tx.outputs f, ListSubset f d.outputs)
+  , DPair f $ \f => (ListFiltered (\u => fst u === p) tx.inputs f, ListIn f d.inputs)
+  , DPair f $ \f => (ListFiltered (\u => fst u === p) tx.outputs f, ListIn f d.outputs)
   , DPair f $ \f =>
     DPair f' $ \f' =>
     (lookup p tx.mint === f, lookup p d.mint === f', f === f')
   )
-
-record Set (a : Type) where
-  constructor MkSet
-  b : Type
-  f : b -> a
-
-getByKey : (a : Type) -> (b : Type) -> b -> Set a -> Maybe a
-getByKey t keyType key (MkSet t f)
-  | t == keyType = Just (f key)
-  | otherwise = Nothing
 
 record Protocol where
   constructor MkProtocol
@@ -124,7 +116,7 @@ sameProtocol :
   (nameFor p1 === nameFor p2) ->
   p1 === p2
 
-ReducibleProtocol : (p : Protocol) -> (UTXOFor p -> Type) -> Type
+ReducibleProtocol : (p : Protocol) -> (UTXOFor (nameFor p) -> Type) -> Type
 DisjointProtocol : Protocol -> Type
 DisjointProtocol p =
   (x : (permissible p).b) -> 
@@ -133,7 +125,7 @@ CoveredProtocol : Protocol -> Type
 
 record ProtocolSoundness (protocol : Protocol) where
   constructor MkProtocolSoundness
-  reducibleType : UTXOFor protocol -> Type
+  reducibleType : UTXOFor (nameFor protocol) -> Type
   reducibility : ReducibleProtocol protocol reducibleType
   disjointness : DisjointProtocol protocol
   coverage : CoveredProtocol protocol
