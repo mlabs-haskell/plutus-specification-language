@@ -5,287 +5,185 @@ import Data.List.Elem
 
 %default total
 
-data ByteString : Type where
+ProtocolName : Type
 
-data Data : Type where
-  DataConstr : Integer -> List Data -> Data
-  DataMap : List (Data, Data) -> Data
-  DataList : List Data -> Data
-  DataInt : Integer -> Data
-  DataBS : ByteString -> Data
+datumType : ProtocolName -> Type
 
-data PubKeyHash : Type where
+UTXORef : Type
 
-data Hash : Type where
+TokenName : Type
 
-data ScriptContext : Type where
+Map : (x : Type) -> (x -> Type) -> Type
 
-data Script : Type where
-  MkScript : (f : Data -> Data -> ScriptContext -> Bool) -> Script
+Value' = Map TokenName (\_ => Integer)
 
-scriptHash : Script -> Hash
-scriptHash = ?scriptHashjjj
+Value = Map ProtocolName (\p => Value' p)
 
-scriptEquality : (f : Script) -> (g : Script) -> (scriptHash f === scriptHash g) -> (f === g)
-scriptEquality = ?scriptEqualityjj
-
-data ScriptAddress : Type where
-
-data Datum : Type where
-  MkDatum : Data -> Datum
-
-data CurrencySymbol : Type where
-
-data TokenName : Type where
-
-data Value : Type where
-  MkValue : List (CurrencySymbol, (List (TokenName, Integer))) -> Value
-
-Address = Either PubKeyHash ScriptAddress
-
-record TxOut where
-  datum : Maybe Datum
-  address : Either PubKeyHash ScriptAddress
+record UTXOFor (p : ProtocolName) where -- UTXO *for a specific protocol*.
+  constructor MkUTXOFor
   value : Value
+  datum : datumType p
+  staker : ProtocolName -- will change the set of accepted txes as a free variable
+  -- ^ I'll get back to that TODO
 
-record TxInfo where
-  constructor MkTxInfo
-  inputs : List TxOut
-  outputs : List TxOut
+UTXO : Type
+UTXO = DPair ProtocolName UTXOFor
+
+record TxIn where
+  constructor MkTxIn
+  utxo : UTXO
+  ref : Maybe UTXORef -- Plutus type
+
+record TxOut (context : ProtocolName) where
+  constructor MkTxOut
+  utxo : UTXO
+  unique : if context == (snd utxo).protocol then () else Bool
+
+TimeRange : Type
+
+record TxDiagram (context : ProtocolName) where
+  constructor MkTxDiagram
+  inputs : List TxIn
+  outputs : List (TxOut context)
   mint : Value
   signatures : List PubKeyHash
+  validRange : TimeRange
 
-data TxCombination : Type where
-  EmptyTx    : TxCombination
-  PureTx     : TxInfo -> TxCombination 
-  SerialTx   : TxCombination -> TxCombination -> TxCombination
-  ParallelTx : TxCombination -> TxCombination -> TxCombination
-  --ChoiceTx   : TxCombination -> TxCombination -> TxCombination
-  PredicateTx : TxCombination -> Bool -> TxCombination
+data Subset : Type -> Type where
+  MakeSubset : (a : Type) -> (a -> Type) -> Subset a
 
----- Marlowe in types ----
+{-
+-- subset of two concrete lists? or should it be subset of types?
+data ListSubset : Type -> Type -> Type where
+  subset : 
+    (a : Type) -> 
+    (b : Type) ->
+    (sa : List a) ->
+    (sb : List b) ->      
+    (_ : \(x : a) => elem x sa -> elem x sb) ->
+    Subset a b
+-}
 
-data MarloweContract : Type where
-  Close : MarloweContract
-  Let : ValueExpression -> (Value -> Contract) -> Contract
-  If : Observation -> MarloweContract -> MarloweContract -> MarloweContract
-  When : [(MarloweAction, MarloweContract)] -> Timeout -> MarloweContract -> MarloweContract
-  Pay : Account -> Account -> Value -> MarloweContract -> MarloweContract
+ListSubset : Subset (List a) 
 
--- data Value
+ListFiltered : (a -> Type) -> List a -> List a -> Type
 
-data TransactionInput : a -> Type where
-  Choice : Account -> Integer -> TransactionInput Integer
-  Deposit : Account -> Value -> TransactionInput Value
-  Notify : Observation a -> TransactionInput a -- waits for the observation to be true
+lookup : (x : a) -> Map a b -> Maybe (b x) -- why (b x)?
 
-data ValueExpression
+-- fixme
+SetSubset : Subset (List a)
 
-data Observation
+ValueSubset : Subset Value
 
-data Account
+record Tx where
+  constructor MkTx 
+  inputs : Set TxIn
+  outputs : List UTXO
+  mint : Value
+  signatures : Set PubKeyHash
+  validRange : TimeRange
 
-data Timeout : Type where
-  Timeout : Integer -> Timeout
+TxMatches : {p : ProtocolName} -> Tx -> TxDiagram p -> Type
+TxMatches tx d = 
+  ( tx.validRange === d.validRange
+  , ListSubset d.inputs tx.inputs
+  , ListSubset d.outputs tx.outputs
+  , ValueSubset d.mint tx.mint
+  , SetSubset d.signatures tx.signatures
+  , DPair f $ \f => (ListFiltered (\u => fst u === p) tx.inputs f, ListSubset f d.inputs)
+  , DPair f $ \f => (ListFiltered (\u => fst u === p) tx.outputs f, ListSubset f d.outputs)
+  , DPair f $ \f =>
+    DPair f' $ \f' =>
+    (lookup p tx.mint === f, lookup p d.mint === f', f === f')
+  )
 
----- end Marlowe ----
+record Set (a : Type) where
+  constructor MkSet
+  b : Type
+  f : b -> a
 
-record TxEffect where
-  constructor MkTxEffect
-  inputs : List TxOut
-  outputs : List TxOut
+getByKey : (a : Type) -> (b : Type) -> b -> Set a -> Maybe a
+getByKey t keyType key (MkSet t f)
+  | t == keyType = Just (f key)
+  | otherwise = Nothing
 
-consume : List TxOut -> List TxOut -> (List TxOut, List TxOut)
-consume _ _ = ?consume_hole
+record Protocol where
+  constructor MkProtocol
+  datumType : Type
+  permissible' : (self : ProtocolName) -> Set (TxDiagram self)
 
-infixl 9 <-> 
-(<->) : List TxOut -> List TxOut -> (List TxOut, List TxOut)
-(<->) = consume
+nameFor : Protocol -> ProtocolName
+sameDatumType : (p : Protocol) -> (datumType (nameFor p) === p.datumType)
 
-compile : TxCombination -> TxEffect
-compile EmptyTx =
-  MkTxEffect {
-    inputs = Nil,
-    outputs = Nil
-  }
+permissible : (p : Protocol) -> Set (TxDiagram (nameFor p))
+permissible p = p.permissible' (nameFor p)
 
-compile (PureTx t) =
-  MkTxEffect {
-    inputs = t.inputs,
-    outputs = t.outputs
-  }
-compile (SerialTx x y) =
-  let (outputs, inputs) = (compile x).outputs <-> (compile y).inputs in
-  MkTxEffect {
-    inputs = (compile x).inputs <+> inputs,
-    outputs = outputs <+> (compile y).outputs
-  }
-compile (ParallelTx x y) =
-  MkTxEffect {
-    inputs = (compile x).inputs <+> (compile y).inputs,
-    outputs = (compile x).outputs <+> (compile y).outputs
-  }
-compile (PredicateTx x _) = compile x
+sameProtocol :
+  (p1 : Protocol) ->
+  (p2 : Protocol) ->
+  (nameFor p1 === nameFor p2) ->
+  p1 === p2
 
-cardanoValidate : TxInfo -> Bool
-cardanoValidate = ?a
+ReducibleProtocol : (p : Protocol) -> (UTXOFor p -> Type) -> Type
+DisjointProtocol : Protocol -> Type
+DisjointProtocol p =
+  (x : (permissible p).b) -> 
+  (y : (permissible p).b) -> (tx : Tx) -> Not (x === y) -> Not (TxMatches tx ((permissible p).f x), TxMatches tx ((permissible p).f y))
+CoveredProtocol : Protocol -> Type
 
-checkCombination : TxCombination -> Bool
-checkCombination EmptyTx = True
-checkCombination (PureTx x) = cardanoValidate x
-checkCombination (SerialTx x y) = checkCombination x && checkCombination y
-checkCombination (ParallelTx x y) = checkCombination x && checkCombination y
-checkCombination (PredicateTx x p) = checkCombination x == p
+record ProtocolSoundness (protocol : Protocol) where
+  constructor MkProtocolSoundness
+  reducibleType : UTXOFor protocol -> Type
+  reducibility : ReducibleProtocol protocol reducibleType
+  disjointness : DisjointProtocol protocol
+  coverage : CoveredProtocol protocol
 
--- Example
+{-
+Ledger : Type
+Ledger = List UTXODaniele Procidaz
 
-data ChessColor = Black | White
+ApplyableTx : TxDiagram -> Ledger -> Type
+ApplyableTx = ?applyableTxHole
 
-exampleScript : ScriptAddress
-exampleScript = ?hy
+applyTx : (ledger : Ledger) -> (tx : TxDiagram) -> (ApplyableTx tx ledger) -> Ledger
+applyTx = ?applyTxHole
 
-hasChessBoard : Datum -> Type 
-hasChessBoard (MkDatum jdawd) = ?hasChessBoardHole  -- something something data has field that is something serialised 
+-- https://github.com/mlabs-haskell/plutus-specification-language/tree/master/new
 
-hasNextPlayer : Datum -> Type
-hasNextPlayer = ?hasNextPlayerhole -- unsure what this is supposed to be 
+record CounterDatum where
+  constructor MkCounterDatum
+  counter : Nat
+  pkh : PubKeyHash
 
-validDatum : Datum -> Type
-validDatum dat = (hasChessBoard dat, hasNextPlayer dat)
+data CounterProtocolPermissible : Type where
+  CounterProtocolStep : List (DPair CounterDatum $ \datum -> LTE 1 datum.counter, Value) -> CounterProtocolPermissible -- why is this a dependent type? Second argument might be a predicate (datum -> Bool)?
+  CounterProtocolConsume : (amount : Nat) -> (pkh : PubKeyHash) -> Value -> CounterProtocolPermissible
 
--- (<) : Integer -> Integer -> Bool
+counterProtocolPermissible : CounterProtocolPermissible -> ProtocolName -> TxDiagram
+counterProtocolPermissible (CounterProtocolStep list) self = MkTxDiagram {
+  inputs = map (\((MkDPair datum _), value) -> MkTxIn { ref = Nothing, utxo = MkUTXO self value datum }) list,
+  outputs = map (\((MkDPair datum _), value) -> MkTxOut { unique = (), utxo = MkUTXO self value (datum { counter = datum.counter - 1 }) }) list
+}
+counterProtocolPermissible (CounterProtocolConsume amount pkh value) = MkTxDiagram {
+  inputs = replicate amount $ MkTxIn { ref = Nothing, utxo = MkUTXO self value (MkCounterDatum { counter = 0, pkh = pkh })},
+  signatures = [ pkh ]
+}
 
-validExample : TxOut -> Type
-validExample utxo = 
-  DPair CurrencySymbol $ \cs =>
-  DPair TokenName $ \tn =>
-  DPair Integer $ \amount => 
-  DPair Datum $ \datum =>
-    ( validDatum datum 
-    , utxo.datum === Just datum
-    , (amount < 1_000_000_000) === True
-    , utxo.address === Right exampleScript
-    , utxo.value === MkValue [(cs, [(tn, amount)])]
-    )
+counterProtocol : Protocol
+counterProtocol = MkProtocol {
+  datumType = CounterDatum
+  permissibleType = CounterProtocolPermissible
+  permissible = counterProtocolPermissible
+}
 
-feeInput : TxOut
-feeInput = ?xufhiawfh
+counterProtocolSoundness : ProtocolSoundness PSL.counterProtocol
+counterProtocolSoundness = MkProtocolSoundness {
+  reducibleType = \_ => (),
+  disjointnessProof = ?osff,
+  coverageProof = ?noideaatallwrtwhatthisshouldbehelpme,
+  reducibleProof = ?
+}
 
-example : TxOut -> TxOut -> TxOut -> TxInfo
-example blackUtxo whiteUtxo chessUtxo = MkTxInfo
-  { inputs = 
-    [ chessUtxo
-    , case ?chessColor chessUtxo of
-        Black => blackUtxo
-        White => whiteUtxo
-    , feeInput
-    ]
-  , outputs =
-    [ ?progressChessUtxo (?findChessAction chessUtxo) chessUtxo
-    , case ?chessColor' chessUtxo of
-        Black => blackUtxo
-        White => whiteUtxo
-    ] 
-  , mint = ?mint
-  , signatures = ?sigs
-  }
+-- https://plutus-pioneer-program.readthedocs.io/en/latest/pioneer/week10.html
 
-exampleProof : 
-     (blackUtxo : DPair TxOut ?validBlack) 
-  -> (whiteUtxo : DPair TxOut ?validWhite)
-  -> (chessUtxo : DPair TxOut PSL.validExample)
-  ->
-    let 
-      tx = example (fst blackUtxo) (fst whiteUtxo) (fst chessUtxo)
-    in
-    ( cardanoValidate tx === True
-    , Elem (fst whiteUtxo) tx.inputs)
-
---tchess : TxInfo -> Type
---tchess t = (utxo : TxOut) -> validChess utxo -> (t.inputs = Cons utxo Nil, t.outputs = Nil) -> cardanoValidate t = True
-
-----------------------------------------------------------------------------
--- Specification of "there is a chain of transactions that let you withdraw"
---
-
-chessUTXO : Type
-chessUTXO = DPair TxOut validExample
-
-withdraws : PSL.chessUTXO -> TxInfo -> Type
-withdraws (MkDPair utxo _ ) tx = DPair PubKeyHash $ \ wallet =>
-   ( Elem utxo tx.inputs
-   , Elem (?paid wallet (MkValue ?utxoValue)) tx.outputs
-   )
-
-validates : TxInfo -> Type
-validates utxo = cardanoValidate utxo === True
-
-nextUTXO : PSL.chessUTXO -> (tx : TxInfo) -> PSL.validates tx -> PSL.chessUTXO -> Type
-nextUTXO = ?nextutxojjj
-
-data EventuallyWithdraws : PSL.chessUTXO -> Type where
-
-  Step : (tx : TxInfo) -> (v : validates tx) -> (utxo' : PSL.chessUTXO)
-         -> (utxo : PSL.chessUTXO) -> PSL.nextUTXO utxo tx v utxo'
-         -> EventuallyWithdraws utxo'
-         -> EventuallyWithdraws utxo
-  Done : (tx : TxInfo) -> (v : validates tx)
-         -> PSL.withdraws utxo tx
-         -> EventuallyWithdraws utxo
-
--- :D
-
--------------------------------------------------------------------------------
--- Specification Stable-Coin
---
---
--- We have the concepts of vaults. If you put in collateral, you get out the
--- stablecoin. If you put in the stablecoin, you get out the collateral.
--- In the real world, the ratio between these are determined by an oracle.
--- For our use case, we assume that the ratio is fixed, such that liquidations are not
--- necessary.
---
--- At a UTXO level, we have 2 minting policies and 1 validator.
--- The minting policy Vm allows minting tokens iff those tokens are locked by the validator V.
--- The minting policy S allows minting tokens iff there is an input locked by the validator V.
--- The validator V only allows consumption iff:
--- - There is exactly one output with the token for Vm, where the output is locked by V again.
--- - The amount of S minted/burned is the difference in the amount of collateral locked by the input vault
---   and output vault, multiplied by the ratio r.
---
--- OLD:
---
--- The vault can hold collateral and mint currency when given collateral.
--- If you give the vault the currency back, you will get a corresponding amount of
--- collateral back. The currency will be burned.
--- There is a (fixed in this case) ratio between the collateral and the currency.
--- The global ratio between the collateral and currency that exist in the set of live UTXOs,
--- should be maintained.
-
--- assume ratioCollateral does not change (much?)
--- assume we have 1 vault
--- baseCase      : 
---   ratioCollateral * (0 collateral) === 0 currency -- True
--- inductiveCase : 
---   assume (prevCollateralValue + ratioCollateral * Y) Collateral === (prevCurrencyVal + Y) Currency
---   prove for (Y+1) 
-
-data Ledger : Type where
-  MkLedger : List (Valid TxOut) -> Ledger
-
--- we have a MP (called m) that produces a Token that is always locked with a specifc Script (called s) 
-
-hasToken : TxOut -> Type
-hasToken utxo = ?hasToken
-
-isAtAddress : ScriptAddress -> TxOut -> Type
-isAtAddress scr utxo = utxo.address === Right scr
- 
-all : (A -> Type) -> List A -> Type
-all P xs = (x : A) -> Elem x xs -> P x
-
-tokenStaysAtAddress : ScriptAddress -> TxInfo -> Type
-tokenStaysAtAddress scr tx = 
-   all (\ utxo => hasToken utxo -> isAtAddress scr utxo) (tx.inputs)
-   -> all (\ utxo => hasToken utxo -> isAtAddress scr utxo) (tx.outputs)
-
+-}
