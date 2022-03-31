@@ -14,8 +14,11 @@ record Set (a : Type) where
 public export
 ProtocolName : Type -> Type
 
+public export
 protocolEquality : ProtocolName a -> ProtocolName b -> Bool
-protocolEqualityLemma : {p : ProtocolName a} -> (protocolEquality {a = a} {b = a} p p === True)
+
+public export
+protocolEqualityReflexivity : (p : ProtocolName a) -> (protocolEquality {a = a} {b = a} p p === True)
 
 public export
 UTXORef : Type
@@ -58,6 +61,10 @@ namespace SomeUTXO
   SomeUTXO = DPair (Exists ProtocolName) (\(Evidence d p) => UTXO {d = d} p)
 
   public export
+  MkSomeUTXO : {0 d : Type} -> {p : ProtocolName d} -> UTXO {d} p -> SomeUTXO
+  MkSomeUTXO {d} {p} u = MkDPair (Evidence d p) u
+
+  public export
   protocol : (utxo : SomeUTXO) -> ProtocolName (fst $ fst utxo)
   protocol utxo = snd $ fst utxo
 
@@ -76,8 +83,13 @@ namespace TxOut
     utxo' : UTXO {d = d'} protocol
     unique : if protocolEquality {a = d} {b = d'} context protocol then () else Bool
 
+  public export
   utxo : TxOut context -> SomeUTXO
   utxo txout = MkDPair (Evidence txout.d' txout.protocol) txout.utxo'
+
+  public export
+  mkOwnTxOut : {0 d : Type} -> {p : ProtocolName d} -> UTXO {d} p -> TxOut {d} p
+  mkOwnTxOut {d} {p} u = MkTxOut { unique = replace {p = \x => if x then () else Bool} (sym $ protocolEqualityReflexivity p) (), d' = d, protocol = p, utxo' = (the (UTXO {d} p) u) }
 
 public export
 TimeRange : Type
@@ -121,6 +133,7 @@ record Tx where
 
 -- FIXME: We should have a lenient version to allow lenient implementations
 -- that still achieve the same goal.
+-- FIXME: Consider input references
 public export
 TxMatches : {0 d : Type} -> {p : ProtocolName d} -> Tx -> TxDiagram {d} p -> Type
 TxMatches {p} tx diagram =
