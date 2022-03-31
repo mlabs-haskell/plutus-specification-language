@@ -2,8 +2,9 @@ module PPayToPKH
 
 import PSL
 import Data.Nat
+import Data.DPair
 
-pPayToPKHPermissible : (self : ProtocolName) -> (PubKeyHash, TimeRange) -> TxDiagram self
+pPayToPKHPermissible : (self : ProtocolName d) -> (PubKeyHash, TimeRange) -> TxDiagram {d} self
 pPayToPKHPermissible self (pkh, validRange) = MkTxDiagram {
   inputs = Nil,
   outputs = Nil,

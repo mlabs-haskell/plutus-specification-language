@@ -2,40 +2,35 @@ module PCounter
 
 import PSL
 import Data.Nat
+import Data.DPair
 
 record CounterDatum where
   constructor MkCounterDatum
   counter : Nat
   pkh : PubKeyHash
 
-data CounterProtocolPermissible : ProtocolName -> Type where
-  MkCounterProtocolStep : {0 self : ProtocolName} -> {0 p : PSL.datumType self === CounterDatum} -> DPair (UTXOFor self) (\u => LTE 1 (the (CounterDatum) $ replace {p = \x => x} p u.datum).counter) -> CounterProtocolPermissible self
-  MkCounterProtocolConsume : {0 p : PSL.datumType self === CounterDatum} -> DPair (UTXOFor self) (\u => (replace {p = \x => x} p u.datum).counter === 0) -> CounterProtocolPermissible self
+data CounterProtocolPermissible : ProtocolName CounterDatum -> Type where
+  MkCounterProtocolStep : DPair (UTXO self) (\u => LTE 1 u.datum.counter) -> CounterProtocolPermissible self
+  MkCounterProtocolConsume : DPair (UTXO self) (\u => u.datum.counter === 0) -> CounterProtocolPermissible self
 
-counterProtocolPermissible : (self : ProtocolName) -> (datumType self === CounterDatum) -> (CounterProtocolPermissible self, TimeRange) -> TxDiagram self
-counterProtocolPermissible self Refl (MkCounterProtocolStep (MkDPair utxo _), validRange) = MkTxDiagram {
-  inputs = [ MkTxIn { ref = Nothing, utxo = MkDPair self utxo } ],
-  outputs = [ MkTxOut { unique = (), utxo = MkDPair self ({ datum.counter := utxo.datum.counter - 1 } utxo) } ],
+counterProtocolPermissible : (self : ProtocolName CounterDatum) -> (CounterProtocolPermissible self, TimeRange) -> TxDiagram {d = CounterDatum} self
+counterProtocolPermissible self (MkCounterProtocolStep (MkDPair utxo _), validRange) = MkTxDiagram {
+  inputs = [ MkTxIn { ref = Nothing, utxo = MkSomeUTXO utxo } ],
+  outputs = [ mkOwnTxOut ({datum := {counter := minus utxo.datum.counter 1} utxo.datum} utxo) ],
   validRange = validRange,
   signatures = [],
   mint = NilMap
 }
-
-{-
+counterProtocolPermissible self (MkCounterProtocolConsume (MkDPair utxo _), validRange) = MkTxDiagram {
+  inputs = [ MkTxIn { ref = Nothing, utxo = MkSomeUTXO utxo } ],
+  outputs = [],
+  validRange = validRange,
+  signatures = [ utxo.datum.pkh ],
+  mint = NilMap
+}
 
 counterProtocol : Protocol
 counterProtocol = MkProtocol {
-  datumType = CounterDatum
-  permissibleType = CounterProtocolPermissible
-  permissible = counterProtocolPermissible
+  datumType = CounterDatum,
+  permissible' = \self => MkSet _ (counterProtocolPermissible self)
 }
-
-counterProtocolSoundness : ProtocolSoundness PSL.counterProtocol
-counterProtocolSoundness = MkProtocolSoundness {
-  reducibleType = \_ => (),
-  disjointnessProof = ?osff,
-  coverageProof = ?noideaatallwrtwhatthisshouldbehelpme,
-  reducibleProof = ?
-}
-
--}
