@@ -2,14 +2,20 @@ module PSL
 
 import Data.List
 import Data.DPair
+import Data.Vect
 
 %default total
 
 public export
 record Set (a : Type) where
   constructor MkSet
-  indexType : Type
-  contents : indexType -> a
+  0 indexType : Type
+  index : indexType -> a
+
+setFromList : List a -> Set a
+setFromList l =
+  let l' : Vect (length l) a = fromList l in
+  MkSet (Fin (length l)) (\i => index i l')
 
 public export
 ProtocolName : Type -> Type
@@ -166,13 +172,13 @@ public export
 ReducibleProtocol : (p : Protocol) -> (UTXO {d = p.datumType} (nameFor p) -> Type) -> Type
 
 public export
-DisjointProtocol : Protocol -> Type
+0 DisjointProtocol : Protocol -> Type
 DisjointProtocol p =
   (x : (permissible p).indexType) ->
   (y : (permissible p).indexType) ->
   (tx : Tx) ->
   Not (x === y) ->
-  Not (TxMatches tx ((permissible p).contents x), TxMatches tx ((permissible p).contents y))
+  Not (TxMatches tx ((permissible p).index x), TxMatches tx ((permissible p).index y))
 
 public export
 CoveredProtocol : Protocol -> Type
