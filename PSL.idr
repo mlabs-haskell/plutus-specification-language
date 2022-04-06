@@ -12,10 +12,28 @@ record Set (a : Type) where
   0 indexType : Type
   index : indexType -> a
 
+public export
+0 SetSubsetF : (a -> Type) -> Set a -> Set a -> Type
+SetSubsetF f x y = (z : x.indexType) -> f (x.index z) -> DPair y.indexType (\w => (f (y.index w), x.index z === y.index w))
+
+public export
+0 SetSubset : Set a -> Set a -> Type
+SetSubset = SetSubsetF (\_ => ())
+
 setFromList : List a -> Set a
 setFromList l =
   let l' : Vect (length l) a = fromList l in
   MkSet (Fin (length l)) (\i => index i l')
+
+0 SetAll : (a -> Type) -> Set a -> Type
+SetAll f x = (y : x.indexType) -> f (x.index y)
+
+0 SetFiltered : (a -> Type) -> Set a -> Set a -> Type
+SetFiltered f x y =
+  ( SetSubset y x
+  , SetSubsetF f x y
+  , SetAll f y
+  )
 
 public export
 ProtocolName : Type -> Type
@@ -103,10 +121,10 @@ TimeRange : Type
 public export
 record TxDiagram {0 d : Type} (context : ProtocolName d) where
   constructor MkTxDiagram
-  inputs : List TxIn
+  inputs : Set TxIn
   outputs : List (TxOut {d} context)
   mint : Value
-  signatures : List PubKeyHash
+  signatures : Set PubKeyHash
   validRange : TimeRange
 
 -- Order is important
@@ -120,10 +138,6 @@ data ListFiltered : (a -> Type) -> List a -> List a -> Type where
   MkListFilteredCons : {0 f : a -> Type} -> f h -> ListFiltered f xt yt -> ListFiltered f (h :: xt) (h :: yt)
   MkListFilteredSkip : {0 f : a -> Type} -> Not (f h) -> ListFiltered f xt y -> ListFiltered f (h :: xt) y
 
--- fixme
-public export
-SetSubset : List a -> List a -> Type
-
 public export
 ValueSubset : Value -> Value -> Type
 
@@ -131,25 +145,24 @@ ValueSubset : Value -> Value -> Type
 public export
 record Tx where
   constructor MkTx 
-  inputs : List TxIn
+  inputs : Set TxIn
   outputs : List SomeUTXO
   mint : Value
-  signatures : List PubKeyHash
+  signatures : Set PubKeyHash
   validRange : TimeRange
 
 -- FIXME: We should have a lenient version to allow lenient implementations
 -- that still achieve the same goal.
 -- FIXME: Consider input references
 public export
-TxMatches : {0 d : Type} -> {p : ProtocolName d} -> Tx -> TxDiagram {d} p -> Type
+0 TxMatches : {0 d : Type} -> {p : ProtocolName d} -> Tx -> TxDiagram {d} p -> Type
 TxMatches {p} tx diagram =
   ( tx.validRange === diagram.validRange
-  , ListIn diagram.inputs tx.inputs
+  , SetSubset diagram.inputs tx.inputs
   , ListIn (map utxo diagram.outputs) tx.outputs
   , ValueSubset diagram.mint tx.mint
   , SetSubset diagram.signatures tx.signatures
-  , DPair (List TxIn) $ \f => (ListFiltered (\u => protocolEquality (protocol u.utxo) p === True) tx.inputs f, ListIn f diagram.inputs)
-  , DPair (List SomeUTXO) $ \f => (ListFiltered (\u => protocolEquality (protocol u) p === True) tx.outputs f, ListIn f (map utxo diagram.outputs))
+  , SetSubsetF (\inp => protocolEquality (protocol inp.utxo) p === True) tx.inputs diagram.inputs
   , DPair (Maybe (Map TokenName Integer)) $ \f =>
     DPair (Maybe (Map TokenName Integer)) $ \f' =>
     (lookupMap (Evidence d p) tx.mint === f, lookupMap (Evidence d p) diagram.mint === f', f === f')
