@@ -6,34 +6,38 @@ import Data.Vect
 
 %default total
 
-public export
-record Set (a : Type) where
-  constructor MkSet
-  0 indexType : Type
-  index : indexType -> a
+namespace Set
+  public export
+  record Set (a : Type) where
+    constructor MkSet
+    0 indexType : Type
+    index : indexType -> a
 
-public export
-0 SetSubsetF : (a -> Type) -> Set a -> Set a -> Type
-SetSubsetF f x y = (z : x.indexType) -> f (x.index z) -> DPair y.indexType (\w => (f (y.index w), x.index z === y.index w))
+  public export
+  0 SetSubsetF : (a -> Type) -> Set a -> Set a -> Type
+  SetSubsetF f x y = (z : x.indexType) -> f (x.index z) -> DPair y.indexType (\w => (f (y.index w), x.index z === y.index w))
 
-public export
-0 SetSubset : Set a -> Set a -> Type
-SetSubset = SetSubsetF (\_ => ())
+  public export
+  0 SetSubset : Set a -> Set a -> Type
+  SetSubset = SetSubsetF (\_ => ())
 
-setFromList : List a -> Set a
-setFromList l =
-  let l' : Vect (length l) a = fromList l in
-  MkSet (Fin (length l)) (\i => index i l')
+  public export
+  fromList : List a -> Set a
+  fromList l =
+    let l' : Vect (length l) a = fromList l in
+    MkSet (Fin (length l)) (\i => index i l')
 
-0 SetAll : (a -> Type) -> Set a -> Type
-SetAll f x = (y : x.indexType) -> f (x.index y)
+  public export
+  0 SetAll : (a -> Type) -> Set a -> Type
+  SetAll f x = (y : x.indexType) -> f (x.index y)
 
-0 SetFiltered : (a -> Type) -> Set a -> Set a -> Type
-SetFiltered f x y =
-  ( SetSubset y x
-  , SetSubsetF f x y
-  , SetAll f y
-  )
+  public export
+  0 SetFiltered : (a -> Type) -> Set a -> Set a -> Type
+  SetFiltered f x y =
+    ( SetSubset y x
+    , SetSubsetF f x y
+    , SetAll f y
+    )
 
 public export
 ProtocolName : Type -> Type
@@ -43,6 +47,12 @@ protocolEquality : ProtocolName a -> ProtocolName b -> Bool
 
 public export
 protocolEqualityReflexivity : (p : ProtocolName a) -> (protocolEquality {a = a} {b = a} p p === True)
+
+public export
+protocolEqualitySymmetry : (p : ProtocolName a) -> (q : ProtocolName b) -> (protocolEquality {a} {b} p q === protocolEquality {a = b} {b = a} q p)
+
+public export
+protocolEqualityTransitivity : (p : ProtocolName a) -> (q : ProtocolName b) -> (r : ProtocolName c) -> protocolEquality {a} {b} p q === True -> protocolEquality {a = b} {b = c} q r === True -> protocolEquality {a} {b = c} p r === True
 
 public export
 UTXORef : Type
