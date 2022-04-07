@@ -114,16 +114,13 @@ namespace TxOut
     constructor MkTxOut
     {0 d' : Type}
     {protocol : ProtocolName d'}
+    0 isDifferentProtocol : (protocolEquality {a = d} {b = d'} context protocol === False)
     utxo' : UTXO {d = d'} protocol
-    unique : if protocolEquality {a = d} {b = d'} context protocol then () else Bool
+    unique : Bool
 
   public export
   utxo : TxOut context -> SomeUTXO
   utxo txout = MkDPair (Evidence txout.d' txout.protocol) txout.utxo'
-
-  public export
-  mkOwnTxOut : {0 d : Type} -> {p : ProtocolName d} -> UTXO {d} p -> TxOut {d} p
-  mkOwnTxOut {d} {p} u = MkTxOut { unique = replace {p = \x => if x then () else Bool} (sym $ protocolEqualityReflexivity p) (), d' = d, protocol = p, utxo' = (the (UTXO {d} p) u) }
 
 public export
 TimeRange : Type
@@ -132,7 +129,8 @@ public export
 record TxDiagram {0 d : Type} (context : ProtocolName d) where
   constructor MkTxDiagram
   inputs : Set TxIn
-  outputs : List (TxOut {d} context)
+  ownOutputs : List (UTXO {d} context)
+  otherOutputs : Set (TxOut {d} context)
   mint : Value
   signatures : Set PubKeyHash
   validRange : TimeRange
@@ -151,7 +149,6 @@ data ListFiltered : (a -> Type) -> List a -> List a -> Type where
 public export
 ValueSubset : Value -> Value -> Type
 
-
 public export
 record Tx where
   constructor MkTx 
@@ -169,7 +166,9 @@ public export
 TxMatches {p} tx diagram =
   ( tx.validRange === diagram.validRange
   , SetSubset diagram.inputs tx.inputs
-  , ListIn (map utxo diagram.outputs) tx.outputs
+  -- FIXME this is wrong
+  -- FIXME we need to check otherOutputs too
+  , ListIn (map MkSomeUTXO diagram.ownOutputs) tx.outputs
   , ValueSubset diagram.mint tx.mint
   , SetSubset diagram.signatures tx.signatures
   , SetSubsetF (\inp => protocolEquality (protocol inp.utxo) p === True) tx.inputs diagram.inputs
