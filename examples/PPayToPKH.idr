@@ -6,10 +6,11 @@ import Data.DPair
 
 pPayToPKHPermissible : (self : ProtocolName d) -> (PubKeyHash, TimeRange) -> TxDiagram {d} self
 pPayToPKHPermissible self (pkh, validRange) = MkTxDiagram {
-  inputs = Nil,
-  outputs = Nil,
-  mint = NilMap,
-  signatures = [pkh],
+  inputs = fromList [],
+  ownOutputs = [],
+  otherOutputs = fromList [],
+  mint = Zero,
+  signatures = fromList [pkh],
   validRange = validRange
 }
 

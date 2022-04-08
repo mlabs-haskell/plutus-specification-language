@@ -66,8 +66,12 @@ TokenName : Type
 public export
 PubKeyHash : Type
 
-public export
-Value : Type
+namespace Value
+  public export
+  Value : Type
+
+  public export
+  Zero : Value
 
 namespace UTXO
   public export
