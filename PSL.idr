@@ -21,6 +21,9 @@ namespace Set
   0 SetSubset : Set a -> Set a -> Type
   SetSubset = SetSubsetF (\_ => ())
 
+  map : (a -> b) -> Set a -> Set b
+  map f (MkSet t g) = MkSet t (f . g)
+
   public export
   fromList : List a -> Set a
   fromList l =
@@ -172,6 +175,23 @@ TxMatches {p} tx diagram =
   , ValueSubset diagram.mint tx.mint
   , SetSubset diagram.signatures tx.signatures
   , SetSubsetF (\inp => protocolEquality (protocol inp.utxo) p === True) tx.inputs diagram.inputs
+  , DPair (Maybe (Map TokenName Integer)) $ \f =>
+    DPair (Maybe (Map TokenName Integer)) $ \f' =>
+    (lookupMap (Evidence d p) tx.mint === f, lookupMap (Evidence d p) diagram.mint === f', f === f')
+  )
+
+-- FIXME: Consider input references
+public export
+0 TxMatchesLenient : {0 d : Type} -> {p : ProtocolName d} -> Tx -> TxDiagram {d} p -> Type
+TxMatchesLenient {p} tx diagram =
+  ( tx.validRange === diagram.validRange
+  , SetSubset diagram.inputs tx.inputs
+  , SetSubset (fromList $ map MkSomeUTXO $ diagram.ownOutputs) (fromList tx.outputs)
+  , SetSubset (map utxo diagram.otherOutputs) (fromList $ tx.outputs)
+  , ValueSubset diagram.mint tx.mint
+  , SetSubset diagram.signatures tx.signatures
+  , SetSubsetF (\inp => protocolEquality (protocol inp.utxo) p === True) tx.inputs diagram.inputs
+  -- FIXME: this is incorrect
   , DPair (Maybe (Map TokenName Integer)) $ \f =>
     DPair (Maybe (Map TokenName Integer)) $ \f' =>
     (lookupMap (Evidence d p) tx.mint === f, lookupMap (Evidence d p) diagram.mint === f', f === f')
