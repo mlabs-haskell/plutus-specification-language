@@ -15,18 +15,20 @@ data CounterProtocolPermissible : ProtocolName CounterDatum -> Type where
 
 counterProtocolPermissible : (self : ProtocolName CounterDatum) -> (CounterProtocolPermissible self, TimeRange) -> TxDiagram {d = CounterDatum} self
 counterProtocolPermissible self (MkCounterProtocolStep (MkDPair utxo _), validRange) = MkTxDiagram {
-  inputs = [ MkTxIn { ref = Nothing, utxo = MkSomeUTXO utxo } ],
-  outputs = [ mkOwnTxOut ({datum := {counter := minus utxo.datum.counter 1} utxo.datum} utxo) ],
+  inputs = fromList [ MkTxIn { ref = Nothing, utxo = MkSomeUTXO utxo } ],
+  ownOutputs = [ {datum := {counter := minus utxo.datum.counter 1} utxo.datum} utxo ],
+  otherOutputs = fromList [],
   validRange = validRange,
-  signatures = [],
-  mint = NilMap
+  signatures = fromList [],
+  mint = Zero
 }
 counterProtocolPermissible self (MkCounterProtocolConsume (MkDPair utxo _), validRange) = MkTxDiagram {
-  inputs = [ MkTxIn { ref = Nothing, utxo = MkSomeUTXO utxo } ],
-  outputs = [],
+  inputs = fromList [ MkTxIn { ref = Nothing, utxo = MkSomeUTXO utxo } ],
+  ownOutputs = [],
+  otherOutputs = fromList [],
   validRange = validRange,
-  signatures = [ utxo.datum.pkh ],
-  mint = NilMap
+  signatures = fromList [ utxo.datum.pkh ],
+  mint = Zero
 }
 
 counterProtocol : Protocol
