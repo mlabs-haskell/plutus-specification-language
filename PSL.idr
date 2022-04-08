@@ -66,19 +66,8 @@ TokenName : Type
 public export
 PubKeyHash : Type
 
-namespace Map
-  public export
-  Map : Type -> Type -> Type
-
-  public export
-  NilMap : Map a b
-
-  public export
-  lookupMap : a -> Map a b -> Maybe b
-
 public export
 Value : Type
-Value = Map (Exists ProtocolName) (Map TokenName Integer)
 
 namespace UTXO
   public export
@@ -177,9 +166,10 @@ TxMatches {p} tx diagram =
   , ValueSubset diagram.mint tx.mint
   , SetSubset diagram.signatures tx.signatures
   , SetSubsetF (\inp => protocolEquality (protocol inp.utxo) p === True) tx.inputs diagram.inputs
-  , DPair (Maybe (Map TokenName Integer)) $ \f =>
-    DPair (Maybe (Map TokenName Integer)) $ \f' =>
-    (lookupMap (Evidence d p) tx.mint === f, lookupMap (Evidence d p) diagram.mint === f', f === f')
+  -- FIXME: this is incorrect
+  --, DPair (Maybe (Map TokenName Integer)) $ \f =>
+  --  DPair (Maybe (Map TokenName Integer)) $ \f' =>
+  --  (lookupMap (Evidence d p) tx.mint === f, lookupMap (Evidence d p) diagram.mint === f', f === f')
   )
 
 -- FIXME: Consider input references
@@ -194,9 +184,9 @@ TxMatchesLenient {p} tx diagram =
   , SetSubset diagram.signatures tx.signatures
   , SetSubsetF (\inp => protocolEquality (protocol inp.utxo) p === True) tx.inputs diagram.inputs
   -- FIXME: this is incorrect
-  , DPair (Maybe (Map TokenName Integer)) $ \f =>
-    DPair (Maybe (Map TokenName Integer)) $ \f' =>
-    (lookupMap (Evidence d p) tx.mint === f, lookupMap (Evidence d p) diagram.mint === f', f === f')
+  --, DPair (Maybe (Map TokenName Integer)) $ \f =>
+  --  DPair (Maybe (Map TokenName Integer)) $ \f' =>
+  --  (lookupMap (Evidence d p) tx.mint === f, lookupMap (Evidence d p) diagram.mint === f', f === f')
   )
 
 public export
