@@ -161,17 +161,19 @@ record Tx where
   signatures : Set PubKeyHash
   validRange : TimeRange
 
--- FIXME: We should have a lenient version to allow lenient implementations
--- that still achieve the same goal.
+data ProtocolOutputsInTx : {0 d : Type} -> (p : ProtocolName d) -> List (UTXO {d} p) -> List SomeUTXO -> Type where
+  PNil : ProtocolOutputsInTx p Nil Nil
+  PConsOther : (o : UTXO {d = d'} p') -> (protocolEquality {a = d} {b = d'} p p' === False) -> ProtocolOutputsInTx {d} p x y -> ProtocolOutputsInTx {d} p x (MkSomeUTXO o :: y)
+  PConsOwn : (o : UTXO {d} p) -> ProtocolOutputsInTx {d} p x y -> ProtocolOutputsInTx {d} p (o :: x) (MkSomeUTXO o :: y)
+
 -- FIXME: Consider input references
 public export
 0 TxMatches : {0 d : Type} -> {p : ProtocolName d} -> Tx -> TxDiagram {d} p -> Type
 TxMatches {p} tx diagram =
   ( tx.validRange === diagram.validRange
   , SetSubset diagram.inputs tx.inputs
-  -- FIXME this is wrong
-  -- FIXME we need to check otherOutputs too
-  , ListIn (map MkSomeUTXO diagram.ownOutputs) tx.outputs
+  , ProtocolOutputsInTx p diagram.ownOutputs tx.outputs
+  , SetSubset (map utxo diagram.otherOutputs) (fromList $ tx.outputs)
   , ValueSubset diagram.mint tx.mint
   , SetSubset diagram.signatures tx.signatures
   , SetSubsetF (\inp => protocolEquality (protocol inp.utxo) p === True) tx.inputs diagram.inputs
