@@ -21,8 +21,8 @@ namespace Set
   0 SetSubset : Set a -> Set a -> Type
   SetSubset = SetSubsetF (\_ => ())
 
-  map : (a -> b) -> Set a -> Set b
-  map f (MkSet t g) = MkSet t (f . g)
+  Functor Set where
+    map f (MkSet t g) = MkSet t (f . g)
 
   public export
   fromList : List a -> Set a
@@ -46,22 +46,30 @@ namespace Set
   0 SetHas : Set a -> a -> Type
   SetHas s x = Exists (\idx => s.index idx === x)
 
-TxInRef : Type
-
-Data : Type
-
-Hash : Type
-
-ByteString : Type
-
-serialiseData : Data -> ByteString
-hash : ByteString -> Hash
-hashAsByteString : Hash -> ByteString
-
-Credential : Type
+  0 SetEqual : Set a -> Set a -> Type
+  SetEqual x y = (SetSubset x y, SetSubset y x)
 
 public export
 UTXORef : Type
+
+public export
+Data : Type
+
+public export
+Hash : Type
+
+public export
+ByteString : Type
+
+public export
+serialiseData : Data -> ByteString
+public export
+hash : ByteString -> Hash
+public export
+hashAsByteString : Hash -> ByteString
+
+public export
+Credential : Type
 
 public export
 TokenName : Type
@@ -83,6 +91,9 @@ namespace RealUTXO
   credential : RealUTXO -> Credential
 
 public export
+UTXORefIs : UTXORef -> RealUTXO -> Type
+
+public export
 ScriptHash : Type
 
 public export
@@ -98,12 +109,18 @@ Semigroup AdditiveNat where
 Monoid AdditiveNat where
   neutral = MkAdditiveNat Z
 
+Eq AdditiveNat where
+  MkAdditiveNat x == MkAdditiveNat y = x == y
+
 public export
 data AdditiveInteger : Type where
   MkAdditiveInteger : Integer -> AdditiveInteger
 
 Semigroup AdditiveInteger where
   MkAdditiveInteger x <+> MkAdditiveInteger y = MkAdditiveInteger $ x + y
+
+Eq AdditiveInteger where
+  MkAdditiveInteger x == MkAdditiveInteger y = x == y
 
 Monoid AdditiveInteger where
   neutral = MkAdditiveInteger 0
@@ -124,6 +141,8 @@ namespace MonoidMap
   Monoid v => Semigroup (MonoidMap k v) => Monoid (MonoidMap k v) where
     neutral = ?emptyMonoidMap
 
+  (Monoid v, Eq v) => Eq (MonoidMap k v) where
+    x == y = ?eqMonoidMap
 
   public export
   MonoidMapMonoid : Monoid v -> Monoid (MonoidMap k v)
@@ -152,7 +171,7 @@ namespace UTXO
 public export
 record TxDiagram (0 d : Type) where
   constructor MkTxDiagram
-  observeInputs : Set TxInRef
+  observeInputs : Set UTXORef
   causeOwnInputs : Set (UTXO d)
   causeOwnOutputs : Set (UTXO d)
   observeOutputs : Set RealUTXO
@@ -189,12 +208,15 @@ record ProtocolImplementation (p : Protocol) where
 utxoFor : (0 p : Protocol) -> {auto pimpl : ProtocolImplementation p} -> UTXO p.datumType -> RealUTXO
 utxoFor _ u = pimpl.mapUTXO u
 
+tokenFor : (0 p : Protocol) -> {auto pimpl : ProtocolImplementation p} -> TokenName -> (ScriptHash, TokenName)
+tokenFor _ t = pimpl.mapToken t
+
 namespace Tx
   public export
   Tx : Type
 
   public export
-  inputs : Tx -> Set TxInRef
+  inputs : Tx -> Set UTXORef
   public export
   outputs : Tx -> Set RealUTXO
   public export
@@ -224,9 +246,13 @@ TxMatches tx diagram =
     realOwnOutputs = map (utxoFor p) diagram.causeOwnOutputs
   in
   ( validRange tx === diagram.validRange
-  -- FIXME:, SetSubset realOwnInputs (inputs tx)
+  , ( inputs' : Set (Subset (UTXORef, RealUTXO) (uncurry UTXORefIs)) **
+      ( SetEqual (map (fst . fst) inputs') (inputs tx)
+      , SetSubset realOwnInputs (map (snd . fst) inputs')
+      , SetSubsetF (\u => SetHas pimpl.targetValidators (credential u)) (map (snd . fst) inputs') realOwnInputs
+      )
+    )
   , SetSubset diagram.observeInputs (inputs tx)
-  -- FIXME:, SetSubsetF (\u => SetHas pimpl.targetValidators u.address.credential) (inputs tx) realOwnInputs
   , SetSubset realOwnOutputs (outputs tx)
   , SetSubset diagram.observeOutputs (outputs tx)
   , SetSubset (map (causeUTXO pimpl.identity) diagram.causeOutputs) (outputs tx)
