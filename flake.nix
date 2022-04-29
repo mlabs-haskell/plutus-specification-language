@@ -11,14 +11,11 @@
     (system:
       let pkgs = nixpkgs.legacyPackages.${system}; in
       rec {
-        packages = idris.buildIdris.${system}
-          {
-            projectName = "psl";
-            src = "${self}";
-            idrisLibraries = [ ];
-          } // {
-          default = packages.installLibrary;
-        };
+        packages.default = (idris.buildIdris.${system} {
+          projectName = "psl";
+          src = "${self}";
+          idrisLibraries = [ ];
+        }).installLibrary;
         devShells.default = pkgs.mkShell {
           buildInputs = [ idris.packages.${system}.idris2 pkgs.rlwrap ];
           shellHook = ''
