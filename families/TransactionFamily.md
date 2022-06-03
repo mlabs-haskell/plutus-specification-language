@@ -7,6 +7,25 @@ The usual Cardano/Plutus concepts presumably need no introduction:
   * *UTxO*, or Unspent TransaXion Output
   * *Transaction*
 
+<!--
+
+~~~ {.haskell}
+{-# LANGUAGE EmptyDataDeriving #-}
+
+import Data.Either (rights)
+import Data.List (intersect)
+
+main = pure ()
+
+data Script deriving (Eq)
+data PubKeyHash
+data UTxO
+data Redeemer
+data TokenName
+data Transaction
+~~~
+-->
+
 Note that we elide the difference between `Script`, `MintingPolicy`,
 `Validator`, `TypedValidator`, `ScriptHash`, and script `Address` for the time
 being, and we also ignore staking. We can now assume the existence of functions
@@ -18,14 +37,23 @@ transactionMints :: Transaction -> [(Script, Redeemer, [(TokenName, Integer)])]
 transactionOutputs :: Transaction -> [UTxO]
 ~~~
 
+<!--
+~~~ {.haskell}
+utxoAddress = undefined
+transactionInputs = undefined
+transactionMints = undefined
+transactionOutputs = undefined
+~~~
+-->
+
 From these we can define
 
 ~~~ {.haskell}
 allScriptsOf :: Transaction -> [Script]
 allScriptsOf t =
-  rights (utxoAddress <$> (transactionInputs t <> transactionOutputs t))
+  rights (utxoAddress <$> ((fst <$> transactionInputs t) <> transactionOutputs t))
   <> (fstOf3 <$> transactionMints t)
-  where fstOf3 (x, _ _) = x
+  where fstOf3 (x, _, _) = x
   
 related :: Transaction -> Transaction -> Bool
 related t1 t2 = not $ null $ allScriptsOf t1 `intersect` allScriptsOf t2
@@ -64,7 +92,7 @@ the openings are well understood and well guarded.
 So we have added some superstructure on top of Cardano concepts, but how does
 it help?
 
-~~~ {.haskell}
+~~~ {.haskell.ignore}
 
 type TransactionKind = (TransactionInputs, TransactionMint, TransactionOutputs)
 
@@ -133,5 +161,3 @@ The problem then is, how to split up the validity conditions among the scripts
 so that every condition is checked by some script, and ideally only once? One
 major issue is that few projects even provide an overview of all possible
 transactions.
-
-
