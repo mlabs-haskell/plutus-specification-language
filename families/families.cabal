@@ -1,0 +1,30 @@
+cabal-version:      2.4
+name:               families
+version:            0.1.0.0
+
+-- A short (one-line) description of the package.
+-- synopsis:
+
+-- A longer description of the package.
+-- description:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+
+-- The license under which the package is released.
+-- license:
+author:             Mario Blažević
+maintainer:         mario@mlabs.city
+
+-- A copyright notice.
+-- copyright:
+-- category:
+extra-source-files: CHANGELOG.md
+
+test-suite doc
+  type:               exitcode-stdio-1.0
+  main-is:            TransactionFamily.lhs
+  ghc-options:        -pgmL markdown-unlit
+  build-depends:      base
+  build-tool-depends: markdown-unlit:markdown-unlit
+  default-language:   Haskell2010
