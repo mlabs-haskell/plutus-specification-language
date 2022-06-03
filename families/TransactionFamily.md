@@ -14,6 +14,7 @@ The usual Cardano/Plutus concepts presumably need no introduction:
 
 import Data.Either (rights)
 import Data.List (intersect)
+import Typed ()
 
 main = pure ()
 
@@ -87,77 +88,4 @@ protocol makes a DApp open by definition, because we cannot tell which
 transactions will be allowed by a future script. All we can do is ensure that
 the openings are well understood and well guarded.
 
-## Formalization
-
-So we have added some superstructure on top of Cardano concepts, but how does
-it help?
-
-~~~ {.haskell.ignore}
-
-type TransactionKind = (TransactionInputs, TransactionMint, TransactionOutputs)
-
-type TransactionInputs = [(Type, Type, Type)] -- (currency, datum, redeemer)
-
-type TransactionMint = [(Type, Type)] -- (currency, datum)
-
-type TransactionOutputs = [(Type, Type)] -- (currency, datum)
-
-type TransactionInputs = ((Type, Type, Type) -> Type) -> Type
-
-class FamilyTransaction (family :: TransactionKind) (transaction :: TransactionKind) where
-  transactionFamily :: transaction -> family
-  familyTransaction :: family -> Maybe transaction
-  -- familyTransaction (transactionFamily t) == Just t
-
-newtype TokenAmounts _redeemer = TokenAmounts (Map TokenName Positive)
-
-data UTxO currencies datum redeemer = UTxO (Address datum redeemer) (currencies TokenAmounts) datum
-
-data RedeemedUTxO currencies datum redeemer = RedeemedUTxO (UTxO currencies datum redeemer) redeemer
-
-data Address datum redeemer =
-  ValidatorScriptAddress (datum -> redeemer -> ScriptContext -> Bool)
-  | PublicAddress PubKeyHash
-
-newtype MintingPolicy redeemer = MintingPolicy (redeemer -> ScriptContext -> Bool)
-
-data TxInfo currencies inputs outputs = TxInfo
-  { txInfoInputs :: inputs (RedeemedUTxO currencies)
-  , txInfoOutputs :: outputs (UTxO currencies)
-  , txInfoFee :: Value
-  , txInfoMint :: currencies Amount
-  , txInfoDCert :: [DCert]
-  , txInfoWdrl :: [(StakingCredential, Integer)]
-  , txInfoValidRange :: POSIXTimeRange
-  , txInfoSignatories :: [PubKeyHash]
-  , txInfoData :: [(DatumHash, Datum)] 
-  , txInfoId :: TxId
-  }
-
-testTransaction :: inputs (RedeemedUTxO currencies) -> outputs (UTxO currencies) -> currencies MintingPolicy
-                -> POSIXTimeRange -> [PubKeyHash] -> [(DatumHash, Datum)] -> Bool
-testTransaction inputs outputs mintingPolicies times signatures dataMap =
-~~~
-
-From the inside perspective of a single on-chain script, there's a transaction
-to validate and a redeemer. A minting policy script also gets to know its
-`ownCurrencySymbol` and for a validator script one of the transaction's inputs
-is marked as the validator's own input.
-
-Scripts matter because they have addresses.
-
-One of the major problems with verifying complex distributed apps on Cardano
-occurs when its transactions consume multiple inputs locked by multiple
-different scripts.
-
-* From the designer's perspective, the transaction is valid if it satisfies
-  certain conditions: it doesn't matter which script checks those conditions.
-
-* From the script developer's perspective, when triggered by a transaction the
-  script needs to check its own particular subset of those conditions. The
-  transaction is valid if every script it triggers says it's valid.
-
-The problem then is, how to split up the validity conditions among the scripts
-so that every condition is checked by some script, and ideally only once? One
-major issue is that few projects even provide an overview of all possible
-transactions.
+Next we add [types](Typed.md).
