@@ -67,15 +67,15 @@ Now we can extend the set of concepts as follows:
   `transitively-related t1 t2 = related t1 t2 ∨ (∃t. related t1 t ∧
   transitively-related t t2)`.
 * A *DApp* or Distributed Application is a union of all scripts of all
-  transactions belonging to a transaction family: `dApp fam = foldMap
-  ``allScriptsOf`` fam`
+  transactions belonging to a transaction family: ``dApp fam = foldMap
+  `allScriptsOf` fam``
 * If we can prove that no transaction outside a given family can
   successfully invoke a script from the family's DApp, we can call the
   family and its DApp *closed*.
 * A *family protocol* is a set of all valid sequences of transactions
   belonging to a given family. Another name for *set of all valid sequences*
   is *language*, and any such language should ideally be specified as a
-  *formal grammar*. The term *transaction family language* would only invite
+  formal *grammar*. The term *transaction family language* would only invite
   confusion, so we'll stick with *protocol* and *protocol grammar*.
 
 Some DApps could be kept intentionally non-closed, i.e. open. For example a
