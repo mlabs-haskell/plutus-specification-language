@@ -101,8 +101,12 @@ instance Transaction 'DrainCollectedFees where
   type Outputs 'DrainCollectedFees = '[Output 'CentralExchange]
 ~~~
 
+The above declarations are already something that could be automatically
+converted into a diagram. They also have a side benefit of being valid Haskell
+declarations that can be verified and built upon.
+
 The instance declarations depend on the following definitions, presented here
-with kind signatures restricted to the example transaction family, but
+with kind signatures restricted to the example transaction family but
 otherwise reusable across different transaction families and DApps:
 
 ~~~ {.haskell.ignore}
@@ -117,6 +121,9 @@ class Transaction (t :: TransactionFamily) where
   type Outputs t :: [Type]
   type Mints t = '[]
 ~~~
+
+Note the dependent kind quantification here, necessary because the redeemer
+type depends on the script:
 
 ~~~ {.haskell}
 type Input :: forall (script :: DApp) -> Redeemer script -> Type
@@ -142,7 +149,7 @@ applied in the opposite direction: if we tried to *also* supply the
 `CentralExchange` script address as a parameter to every oracle there'd be a
 cyclic dependency. We can't close the type family this way.
 
-One workaround is to rely on an NFT whose sole token is carried by our
+One workaround is to use an NFT whose sole token is carried by our
 `CentralExchange`. The NFT identity can be supplied as a parameter to every
 oracle as well as the exchange, so there's no cyclic dependency. With this
 addition we can close our dApp so it looks [as follows](NFT.md).
