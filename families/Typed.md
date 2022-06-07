@@ -11,6 +11,8 @@ import Data.Kind (Type)
 import Data.Map (Map)
 import Numeric.Natural (Natural)
 
+import Families
+
 data POSIXTime
 
 ~~~
@@ -99,11 +101,11 @@ instance Transaction 'DrainCollectedFees where
   type Outputs 'DrainCollectedFees = '[Output 'CentralExchange]
 ~~~
 
-The instance declarations depend on the following definitions that are tied to
-the example transaction family, but can be generalized to become reusable across
-different transaction families and DApps:
+The instance declarations depend on the following definitions, presented here
+with kind signatures restricted to the example transaction family, but
+otherwise reusable across different transaction families and DApps:
 
-~~~ {.haskell}
+~~~ {.haskell.ignore}
 class ValidatorScript (script :: DApp) where
   type Currency script :: Token
   type Datum script :: Type
@@ -114,7 +116,9 @@ class Transaction (t :: TransactionFamily) where
   type Mints t :: [Type]
   type Outputs t :: [Type]
   type Mints t = '[]
+~~~
 
+~~~ {.haskell}
 type Input :: forall (script :: DApp) -> Redeemer script -> Type
 data Input script redeemer = Input
 data Output (script :: DApp)
@@ -141,28 +145,4 @@ cyclic dependency. We can't close the type family this way.
 One workaround is to rely on an NFT whose sole token is carried by our
 `CentralExchange`. The NFT identity can be supplied as a parameter to every
 oracle as well as the exchange, so there's no cyclic dependency. With this
-addition we can close our dApp so it looks as follows:
-
-
-From the inside perspective of a single on-chain script, there's a transaction
-to validate and a redeemer. A minting policy script also gets to know its
-`ownCurrencySymbol` and for a validator script one of the transaction's inputs
-is marked as the validator's own input.
-
-Scripts matter because they have addresses.
-
-One of the major problems with verifying complex distributed apps on Cardano
-occurs when its transactions consume multiple inputs locked by multiple
-different scripts.
-
-* From the designer's perspective, the transaction is valid if it satisfies
-  certain conditions: it doesn't matter which script checks those conditions.
-
-* From the script developer's perspective, when triggered by a transaction the
-  script needs to check its own particular subset of those conditions. The
-  transaction is valid if every script it triggers says it's valid.
-
-The problem then is, how to split up the validity conditions among the scripts
-so that every condition is checked by some script, and ideally only once? One
-major issue is that few projects even provide an overview of all possible
-transactions.
+addition we can close our dApp so it looks [as follows](NFT.md).
