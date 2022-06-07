@@ -51,8 +51,8 @@ from the oracles.
   drained by the exchange authority in a separate transaction.
 
 Once abstracted of specific amounts and other details, all different
-transactions listed above make up a closed transaction family of N²+N+1
-transaction types. We can represent these types in Haskell as follows.
+transactions listed above make up a transaction family of N²+N+1 transaction
+types. We can represent these types in Haskell as follows.
 
 ~~~ {.haskell}
 data DApp = Oracle Natural | CentralExchange
@@ -99,8 +99,11 @@ instance Transaction 'DrainCollectedFees where
   type Outputs 'DrainCollectedFees = '[Output 'CentralExchange]
 ~~~
 
-~~~ {.haskell}
+The instance declarations depend on the following definitions that are tied to
+the example transaction family, but can be generalized to become reusable across
+different transaction families and DApps:
 
+~~~ {.haskell}
 class ValidatorScript (script :: DApp) where
   type Currency script :: Token
   type Datum script :: Type
@@ -121,6 +124,25 @@ data WalletOutput currency
 
 data c1 :+ c2
 ~~~
+
+Is this transaction family open or closed? A most likely design would have the
+oracles open to other exchanges and other kinds of dApps, so at least the
+`Trade` redeemer would be accessible to anyone. However there is no value in any
+`Value` locked by an oracle, so this opening is not much of a vulnerability
+itself. We just need to ensure that every oracle verifies that its
+`priceInLovelace` cannot be changed by any transaction using this redeemer.
+
+The `CentralExchange` script on the other hand would likely be parameterized
+by a whitelist of accepted oracles. Unfortunately the same method can't be
+applied in the opposite direction: if we tried to *also* supply the
+`CentralExchange` script address as a parameter to every oracle there'd be a
+cyclic dependency. We can't close the type family this way.
+
+One workaround is to rely on an NFT whose sole token is carried by our
+`CentralExchange`. The NFT identity can be supplied as a parameter to every
+oracle as well as the exchange, so there's no cyclic dependency. With this
+addition we can close our dApp so it looks as follows:
+
 
 From the inside perspective of a single on-chain script, there's a transaction
 to validate and a redeemer. A minting policy script also gets to know its
