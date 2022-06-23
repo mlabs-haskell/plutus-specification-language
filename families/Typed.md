@@ -1,9 +1,9 @@
-## Typing transaction families
+# Typing transaction families
 
 <!--
 ~~~ {.haskell}
-{-# LANGUAGE DataKinds, ExplicitForAll, KindSignatures, StandaloneKindSignatures,
-             MultiParamTypeClasses, PolyKinds, TypeFamilies, TypeOperators #-}
+{-# LANGUAGE DataKinds, GADTs, ExplicitForAll, KindSignatures, StandaloneKindSignatures,
+             MultiParamTypeClasses, NoStarIsType, PolyKinds, TypeFamilies, TypeOperators #-}
 
 module Typed where
 
@@ -135,6 +135,56 @@ data WalletOutput currency
 
 data c1 :+ c2
 ~~~
+
+## Building concrete transactions
+
+A `Transaction` instance such as `'Exchange` describes only a general shape of
+the transaction. We can fill in the details using
+
+~~~ {.haskell}
+data TxInstance t where
+  TxInstance :: Transaction t => {
+    txInputs :: TxInputInstances (Inputs t),
+    txCollateral :: [WalletInput Ada],
+    txOutputs :: TxOutInstances (Outputs t),
+    txMint :: Mints t,
+    txValidRange :: !SlotRange,
+    txFee :: Value Ada,
+    txSignatures :: Map PubKey Signature}
+    -> TxInstance t
+
+data TxInputInstances scripts where
+  TxInputsNil :: TxInputInstances '[]
+  TxInputsCons :: TxInputInstance (Input s) -> TxInputInstances rest -> TxInputInstances (s ': rest)
+
+data TxInputInstance s where
+  TxInputInstance :: ValidatorScript s => {
+    txInputOut      :: TxOutInstance s,
+    txInputRedeemer :: Redeemer s}
+    -> TxInputInstance s
+
+data TxOutInstances scripts where
+  TxOutsNil :: TxOutInstances '[]
+  TxOutsCons :: TxOutInstance (Output s) -> TxOutInstances rest -> TxOutInstances (s ': rest)
+
+data TxOutInstance s where
+  TxOutInstance :: ValidatorScript s => {
+    txOutDatum :: Datum s,
+    txOutValue :: Value (Currency s)}
+    -> TxOutInstance s
+
+data Value currencies
+~~~
+
+<!--
+~~~ {.haskell}
+data PubKey
+data Signature
+data SlotRange
+~~~
+-->
+
+## Closing the family
 
 Is this transaction family open or closed? A most likely design would have the
 oracles open to other exchanges and other kinds of dApps, so at least the
