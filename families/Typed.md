@@ -63,9 +63,7 @@ data TransactionFamily =
   | Exchange Natural Natural
   | DrainCollectedFees
 data Token = Ada | Token Natural | Token :+ Token
-type instance DApp ('UpdateOracle n) = MyDApp
-type instance DApp ('Exchange m n) = MyDApp
-type instance DApp 'DrainCollectedFees = MyDApp
+type instance DApp (t :: TransactionFamily) = MyDApp
 type instance Economy (t :: TransactionFamily) = Token
 
 data OracleDatum = OracleDatum {
@@ -94,7 +92,6 @@ instance Transaction ('UpdateOracle n) where
   type Inputs ('UpdateOracle n) = UpdateOracleInputs n
   type Outputs ('UpdateOracle n) = UpdateOracleOutputs n
 
--- type ExchangeInputs :: Natural -> Natural -> (MyDApp -> Redeemer s -> Type) -> (c -> Type) -> Type
 type ExchangeInputs :: Natural -> Natural -> (forall (s :: MyDApp) -> Redeemer s -> Type) -> (Token -> Type) -> Type
 data ExchangeInputs m n s w = ExchangeInputs {
     exchange :: s 'CentralExchange '(),
@@ -131,30 +128,21 @@ with kind signatures restricted to the example transaction family but
 otherwise reusable across different transaction families and DApps:
 
 ~~~ {.haskell.ignore}
-class ValidatorScript (script :: DApp) where
-  type Currency script :: Token
-  type Datum script :: Type
-  type Redeemer script :: Type
-
-class Transaction (t :: TransactionFamily) where
-  type Inputs t :: [Type]
-  type Mints t :: [Type]
-  type Outputs t :: [Type]
-  type Mints t = '[]
+class ValidatorScript s where
+  type Currency s :: k
+  type Datum s    :: Type
+  type Redeemer s = (r :: Type) | r -> s
 ~~~
 
 Note the dependent kind quantification here, necessary because the redeemer
 type depends on the script:
 
 ~~~ {.haskell.ignore}
-type Input :: forall (script :: DApp) -> Redeemer script -> Type
-data Input script redeemer = Input
-data Output (script :: DApp)
-
-data WalletInput currency
-data WalletOutput currency
-
-data c1 :+ c2
+class Transaction (t :: familie) where
+  type Inputs t  :: (forall s -> Redeemer s -> Type) -> (Economy t -> Type) -> Type
+  type Mints t   :: (c -> Type) -> Type
+  type Outputs t :: (DApp t -> Type) -> (Economy t -> Type) -> Type
+  type Mints t = Const ()
 ~~~
 
 ## Building concrete transactions

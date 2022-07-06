@@ -33,20 +33,7 @@ data OracleDatum = OracleDatum {
   expiry :: POSIXTime
   }
 data OracleRedeemer = Trade | Update
-~~~
 
-<!--
-~~~ {.haskell.ignore}
-type Input :: forall (script :: DApp) -> Redeemer script -> Type
-data Input script redeemer = Input
-data Output (script :: DApp)
-
-data WalletInput currency
-data WalletOutput currency
-~~~
--->
-
-~~~ {.haskell}
 instance ValidatorScript CentralExchange where
   type Currency CentralExchange = 'Ada :+ 'AuthNFT
   type Datum CentralExchange = ()

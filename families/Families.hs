@@ -28,14 +28,3 @@ data Wallet c s w
 
 type InputWallet :: c -> (forall s -> Redeemer s -> Type) -> (c -> Type) -> Type
 data InputWallet c s w
-
-{-
-type Input :: forall (script :: k) -> Redeemer script -> Type
-data Input script redeemer = Input
-data Output (script :: k)
-
-data WalletInput currency
-data WalletOutput currency
-
-data c1 :+ c2
--}
