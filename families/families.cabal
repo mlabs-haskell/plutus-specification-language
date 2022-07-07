@@ -24,7 +24,7 @@ extra-source-files: CHANGELOG.md
 test-suite doc
   type:               exitcode-stdio-1.0
   main-is:            TransactionFamily.lhs
-  other-modules:      Families, Typed, NFT
+  other-modules:      Families, Typed, HKD, NFT
   ghc-options:        -pgmL markdown-unlit
   build-depends:      base, containers
   build-tool-depends: markdown-unlit:markdown-unlit
