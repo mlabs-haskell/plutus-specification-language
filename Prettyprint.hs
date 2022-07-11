@@ -6,7 +6,11 @@
 module Plutarch.PSL.Prettyprint where
 
 import Control.Monad.Trans.Class (MonadTrans (lift))
-import Control.Monad.Trans.Reader (ReaderT (ReaderT, runReaderT), ask, local)
+import Control.Monad.Trans.Reader
+  ( ReaderT (ReaderT, runReaderT),
+    ask,
+    local,
+  )
 import Data.Functor.Const
 import Data.Functor.Identity (Identity (runIdentity))
 import Data.Kind (Type)
@@ -21,6 +25,8 @@ import qualified Generics.SOP.NS as SOP
 import Plutarch.Core
 import Plutarch.EType
 import Plutarch.PSL
+import Prettyprinter
+import Prettyprinter.Render.Text (renderStrict)
 
 newtype Lvl = Lvl {unLvl :: Int}
   deriving (Num, Show) via Int
@@ -35,11 +41,14 @@ data PprType
 data PprTerm
   = PprCall Text [PprTerm] -- func a b c ...
   | PprMonCat PprTerm PprTerm -- x <> y
-  | PprLam Text PprType PprTerm -- \x : A. M
+  | PprLam PprBind PprType PprTerm -- \x : A. M
   | PprApp PprTerm PprTerm -- f x
-  | PprMatch PprTerm Text [(Text, PprTerm)] -- match M as x for { ConA -> ...; ConB -> ... }
+  | PprMatch PprTerm PprBind [(Text, PprTerm)] -- match M as x for { ConA -> ...; ConB -> ... }
   | PprProj PprTerm Text -- x.field
-  | PprVar Lvl Text -- x
+  | PprVar PprBind -- x
+  deriving stock (Show)
+
+data PprBind = PprBind Lvl Text -- unique bind\
   deriving stock (Show)
 
 data EDummy (ef :: ETypeF)
@@ -131,15 +140,10 @@ instance TypeReprInfo m EDCert where typeReprInfo _ _ = PprName "DCert" []
 
 instance TypeReprInfo m EData where typeReprInfo _ _ = PprName "Data" []
 
-getCurrentVar :: Monad m => PprM m PprTerm
+getCurrentVar :: Monad m => PprM m PprBind
 getCurrentVar = do
   (lvl, nm) <- ask
-  pure $ PprVar lvl nm
-
-getCurrentVarName :: Monad m => PprM m Text
-getCurrentVarName = do
-  (_, nm) <- ask
-  pure nm
+  pure $ PprBind lvl nm
 
 bound :: Text -> PprM m a -> PprM m a
 bound nm m = local (\(l, _) -> (l + 1, nm)) m
@@ -160,9 +164,8 @@ instance
     pr' <- pr
     bound "pair" do
       var <- getCurrentVar
-      nm <- getCurrentVarName
-      matched <- runTerm $ f $ EPair (pterm $ PprProj var "1") (pterm $ PprProj var "2")
-      pure $ PprMatch pr' nm [("Pair", matched)]
+      matched <- runTerm $ f $ EPair (pterm $ PprProj (PprVar var) "1") (pterm $ PprProj (PprVar var) "2")
+      pure $ PprMatch pr' var [("Pair", matched)]
 
 {-# COMPLETE MkTerm #-}
 
@@ -182,17 +185,15 @@ instance (Monad m, IsEType (Ppr m) a, IsEType (Ppr m) b) => EConstructable' (Ppr
     et' <- et
     bound "either" do
       var <- getCurrentVar
-      nm <- getCurrentVarName
-      matchLeft <- runTerm $ f $ ELeft (pterm var)
-      matchRight <- runTerm $ f $ ERight (pterm var)
-      pure $ PprMatch et' nm [("Left", matchLeft), ("Right", matchRight)]
+      matchLeft <- runTerm $ f $ ELeft (pterm $ PprVar var)
+      matchRight <- runTerm $ f $ ERight (pterm $ PprVar var)
+      pure $ PprMatch et' var [("Left", matchLeft), ("Right", matchRight)]
 
 instance (Monad m, IsEType (Ppr m) a, IsEType (Ppr m) b) => EConstructable' (Ppr m) (MkETypeRepr (a #-> b)) where
   econImpl (ELam f) = Ppr $ bound "x" do
     var <- getCurrentVar
-    nm <- getCurrentVarName
-    body <- runTerm $ f $ pterm var
-    pure $ PprLam nm (typeInfo (Proxy @m) (Proxy @a)) body
+    body <- runTerm $ f $ pterm $ PprVar var
+    pure $ PprLam var (typeInfo (Proxy @m) (Proxy @a)) body
   ematchImpl (Ppr lm) f = f $ ELam \(MkTerm x) -> term $ PprApp <$> lm <*> x
 
 -- instance (forall a. EConstructable Ppr a => EConstructable Ppr (f a))
@@ -216,13 +217,12 @@ instance (Monad m, EIsSOP (Ppr m) a) => EConstructable' (Ppr m) (MkETypeRepr (EN
     EIsSumR (_ :: Proxy inner) to _ -> term $ bound "c" do
       x' <- x
       var <- getCurrentVar
-      nm <- getCurrentVarName
       let conNames = SOP.collapse_NP $ SOP.map_NP (SOP.K . T.pack . SOP.constructorName) $ SOP.constructorInfo $ SOP.gdatatypeInfo (Proxy @(a f))
       xs <-
         sequence $
           fmap (\x -> runTerm (f $ ENewtype $ SOP.gto $ to x)) $
-            SOP.apInjs_POP $ gpAllConProjs (SOP.constructorInfo $ SOP.gdatatypeInfo $ Proxy @(a f)) var
-      pure $ PprMatch x' nm (zip conNames xs)
+            SOP.apInjs_POP $ gpAllConProjs (SOP.constructorInfo $ SOP.gdatatypeInfo $ Proxy @(a f)) (PprVar var)
+      pure $ PprMatch x' var (zip conNames xs)
 
 gsFindConName :: forall xss' f xss. SOP.NP SOP.ConstructorInfo xss' -> SOP.SOP f xss -> String
 gsFindConName (_ SOP.:* cons) (SOP.SOP (SOP.S next)) = gsFindConName cons (SOP.SOP next)
@@ -231,7 +231,12 @@ gsFindConName _ _ = undefined
 
 data ConstEx c xss = forall xss'. ConstEx (c xss')
 
-gpAllConProjs :: forall xss' m xss. (Applicative m, SOP.SListI2 xss', SOP.All2 (IsEType (Ppr m)) xss) => SOP.NP SOP.ConstructorInfo xss' -> PprTerm -> SOP.POP (Term (Ppr m)) xss
+gpAllConProjs ::
+  forall xss' m xss.
+  (Applicative m, SOP.SListI2 xss', SOP.All2 (IsEType (Ppr m)) xss) =>
+  SOP.NP SOP.ConstructorInfo xss' ->
+  PprTerm ->
+  SOP.POP (Term (Ppr m)) xss
 gpAllConProjs info var =
   SOP.POP $
     SOP.cana_NP
@@ -247,7 +252,12 @@ getFieldNames = \case
   SOP.Record _ fs -> SOP.map_NP (\(SOP.FieldInfo nm) -> Const $ T.pack nm) fs
   _ -> SOP.ana_NP (\(Const n) -> (Const $ T.pack $ show n, Const (n + 1))) (Const 1)
 
-gpAllProjs :: forall xs' m xs. (Applicative m, SOP.All (IsEType (Ppr m)) xs) => SOP.NP (Const Text) xs' -> PprTerm -> SOP.NP (Term (Ppr m)) xs
+gpAllProjs ::
+  forall xs' m xs.
+  (Applicative m, SOP.All (IsEType (Ppr m)) xs) =>
+  SOP.NP (Const Text) xs' ->
+  PprTerm ->
+  SOP.NP (Term (Ppr m)) xs
 gpAllProjs fields var =
   SOP.cana_NP
     (Proxy @(IsEType (Ppr m)))
@@ -281,26 +291,114 @@ instance Monad m => EEmbeds m (Ppr m) where
 compile' :: forall a m. (Applicative m, IsEType (Ppr m) a) => Term (Ppr m) a -> m (PprTerm, PprType)
 compile' v = (,) <$> runReaderT (runTerm v) (-1, "") <*> pure (typeInfo (Proxy @m) (Proxy @a))
 
-compile :: Compile ESOP Text
+compile :: Compile EPSL Text
 compile v = let _unused = callStack in ppr . fst <$> compile' v
 
 compileSimple :: forall a m. (Applicative m, IsEType (Ppr m) a) => Term (Ppr m) a -> m Text
 compileSimple v = ppr . fst <$> compile' v
 
 ppr :: PprTerm -> Text
-ppr = T.pack . show
+ppr = renderStrict . layoutPretty defaultLayoutOptions . (`pprTerm` (-10))
 
-testTerm :: ESOP edsl => Term edsl (EUnit #-> EUnit)
-testTerm = econ (ELam \x -> x)
+testTerm :: EPSL edsl => Term edsl (EInteger #-> EUnit #-> EInteger)
+testTerm = econ (ELam \x -> econ $ ELam \y -> x)
 
 compiled :: Text
 compiled = runIdentity $ compileSimple testTerm
 
+type Prec = Int
+
+withPrec :: Prec -> Doc a -> Prec -> Doc a
+withPrec myPrec raw yourPrec =
+  if myPrec < yourPrec
+    then parens raw
+    else raw
+
+pprBind :: PprBind -> Doc a
+pprBind (PprBind lvl _) = pretty $ show lvl
+
+pprType :: PprType -> Prec -> Doc a
+pprType = \case
+  PprName head args -> withPrec 10 $ sep $ pretty head : fmap (`pprType` 11) args
+  PprProduct lhs rhs -> withPrec 7 $ pprType lhs 8 <+> "*" <+> pprType rhs 7
+  PprSum lhs rhs -> withPrec 6 $ pprType lhs 7 <+> "+" <+> pprType rhs 6
+  PprFunc lhs rhs -> withPrec 0 $ pprType lhs 1 <+> "->" <+> pprType rhs 0
+
+pprTerm :: PprTerm -> Prec -> Doc a
+pprTerm = \case
+  PprCall head args -> withPrec 10 $ sep $ pretty head : fmap (`pprTerm` 11) args
+  PprMonCat lhs rhs -> withPrec 5 $ pprTerm lhs 5 <+> "<>" <+> pprTerm rhs 6
+  PprLam param ty body -> withPrec (-1) $ "\\" <> pprBind param <> ":" <+> pprType ty 0 <+> "->" <+> pprTerm body (-1)
+  PprApp f x -> withPrec 10 $ pprTerm f 10 <+> pprTerm x 11
+  PprMatch scrut var branches ->
+    withPrec 0 $
+      "match" <+> pprTerm scrut 0 <+> "as" <+> pprBind var <+> "with"
+        <+> encloseSep lbrace rbrace semi (map (\(con, body) -> pretty con <+> "->" <+> pprTerm body 1) branches)
+  PprProj obj field -> withPrec 11 $ pprTerm obj 11 <> "." <> pretty field
+  PprVar var -> const $ pprBind var
+
 -- >>> compiled
--- "PprLam \"x\" (PprName \"()\" []) (PprVar 0 \"x\")"
+-- "\\0: Integer -> \\1: () -> 0"
 
--- TODO: proper prettyprinting
--- TODO: EPSL builtins
-
--- instance Monad m => EPSL (Ppr m) where
---   requireInput (Term x) = term \lvl -> PprBuiltin "requireInput" [runPpr x lvl]
+instance Monad m => EPSL (Ppr m) where
+  requireInput (MkTerm x) = term do
+    x' <- x
+    pure $ PprCall "requireInput" [x']
+  requireOwnInput (MkTerm x) = term do
+    x' <- x
+    pure $ PprCall "requireOwnInput" [x']
+  createOwnOutput (MkTerm x) = term do
+    x' <- x
+    pure $ PprCall "createOwnOutput" [x']
+  witnessOutput (MkTerm x) = term do
+    x' <- x
+    pure $ PprCall "witnessOutput" [x']
+  createOutput (MkTerm x) = term do
+    x' <- x
+    pure $ PprCall "createOutput" [x']
+  mintOwn (MkTerm x) (MkTerm y) = term do
+    x' <- x
+    y' <- y
+    pure $ PprCall "mintOwn" [x', y']
+  witnessMint (MkTerm x) (MkTerm y) (MkTerm z) = term do
+    x' <- x
+    y' <- y
+    z' <- z
+    pure $ PprCall "witnessMint" [x', y', z']
+  requireSignature (MkTerm x) = term do
+    x' <- x
+    pure $ PprCall "requireSignature" [x']
+  requireValidRange (MkTerm x) = term do
+    x' <- x
+    pure $ PprCall "requireValidRange" [x']
+  requireDCert (MkTerm x) = term do
+    x' <- x
+    pure $ PprCall "requireDCert" [x']
+  toProtocol _ (MkTerm x) (MkTerm y) = term do
+    x' <- x
+    y' <- y
+    pure $ PprCall "toProtocol" [x', y']
+  toAddress (MkTerm x) (MkTerm y) (MkTerm z) = term do
+    x' <- x
+    y' <- y
+    z' <- z
+    pure $ PprCall "toAddress" [x', y', z']
+  fromPkh (MkTerm x) = term do
+    x' <- x
+    pure $ PprCall "fromPkh" [x']
+  utxoRefIs (MkTerm x) (MkTerm y) = term do
+    x' <- x
+    y' <- y
+    pure $ PprCall "utxoRefIs" [x', y']
+  emptyValue = mempty
+  mkValue (MkTerm x) (MkTerm y) (MkTerm z) = term do
+    x' <- x
+    y' <- y
+    z' <- z
+    pure $ PprCall "mkValue" [x', y', z']
+  mkAda (MkTerm x) = term do
+    x' <- x
+    pure $ PprCall "mkAda" [x']
+  mkOwnValue (MkTerm x) = term do
+    x' <- x
+    pure $ PprCall "mkOwnValue" [x']
