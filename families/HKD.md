@@ -7,8 +7,10 @@
 
 module HKD where
 
+import Data.Functor.Const (Const (Const))
 import Data.Kind (Type)
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Numeric.Natural (Natural)
 
 import Families
@@ -19,7 +21,7 @@ data POSIXTime
 -->
 
 The new HKD representation of the transaction family and DApp types in Haskell allows us, first of all, to move all
-reusable declarations in a library module:
+reusable declarations into a library module:
 
 ~~~ {.haskell.ignore}
 module Families where
@@ -81,7 +83,8 @@ instance ValidatorScript CentralExchange where
 ~~~
 -->
 
-The new HKD representation of the transaction family and DApp types in Haskell is
+The new HKD representation of the transaction family and DApp types in Haskell is wordier than it used to be, because
+we need to declare two new ADTs for inputs and outputs of every script:
 
 ~~~ {.haskell}
 data ExchangeDApp = Oracle Natural | CentralExchange
@@ -101,17 +104,17 @@ instance Transaction ('UpdateOracle n) where
 
 type ExchangeInputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Redeemer s -> Type) -> (Token -> Type) -> Type
 data ExchangeInputs m n s w = ExchangeInputs {
-    exchange :: s 'CentralExchange '(),
-    oracle1 :: s ('Oracle m) 'Trade,
-    oracle2 :: s ('Oracle n) 'Trade,
-    wallet1 :: w ('Token m :+ 'Ada),
-    wallet2 :: w ('Token n :+ 'Ada)}
+  exchange :: s 'CentralExchange '(),
+  oracle1 :: s ('Oracle m) 'Trade,
+  oracle2 :: s ('Oracle n) 'Trade,
+  wallet1 :: w ('Token m :+ 'Ada),
+  wallet2 :: w ('Token n :+ 'Ada)}
 data ExchangeOutputs m n s w = ExchangeOutputs {
-    exchange :: s 'CentralExchange,
-    oracle1 :: s ('Oracle m),
-    oracle2 :: s ('Oracle n),
-    wallet1 :: w ('Token m),
-    wallet2 :: w ('Token n)}
+  exchange :: s 'CentralExchange,
+  oracle1 :: s ('Oracle m),
+  oracle2 :: s ('Oracle n),
+  wallet1 :: w ('Token m :+ 'Ada),
+  wallet2 :: w ('Token n :+ 'Ada)}
 instance Transaction ('Exchange m n) where
   type Inputs ('Exchange m n) = ExchangeInputs m n
   type Outputs ('Exchange m n) = ExchangeOutputs m n
@@ -128,54 +131,89 @@ instance Transaction 'DrainCollectedFees where
 
 ## Building concrete transactions
 
-A `Transaction` instance such as `'Exchange` describes only a general shape of
-the transaction. We can fill in the details using
+That was the pain, now for the gain. We can supply a specific type parameter for `Inputs` and `Outputs` of the
+transaction to fill in the details. Furthermore, the following definitions are also project-generic: 
 
-~~~ {.haskell}
-data TxInstance t where
-  TxInstance :: Transaction t => {
-    txInputs :: Inputs t TxInputInstance WalletInstance,
-    txCollateral :: WalletInstance Ada,
-    txOutputs :: Outputs t TxOutInstance WalletInstance,
-    txMint :: Mints t TxMintInstance,
-    txValidRange :: !SlotRange,
-    txFee :: Value Ada,
-    txSignatures :: Map PubKey Signature}
-    -> TxInstance t
+~~~ {.haskell.ignore}
+data TxSpecimen t = TxSpecimen {
+  txInputs :: Inputs t TxInputSpecimen WalletSpecimen,
+  txCollateral :: WalletSpecimen Ada,
+  txOutputs :: Outputs t TxOutSpecimen WalletSpecimen,
+  txMint :: Mints t TxMintSpecimen,
+  txValidRange :: !SlotRange,
+  txFee :: Value Ada,
+  txSignatures :: Map PubKey Signature}
 
-type TxInputInstance :: forall (s :: script) -> Redeemer s -> Type
-data TxInputInstance s r where
-  TxInputInstance :: ValidatorScript s => {
-    txInputOut      :: TxOutInstance s,
-    txInputRedeemer :: Redeemer s}
-    -> TxInputInstance s r
+type TxInputSpecimen :: forall (s :: script) -> Redeemer s -> Type
+data TxInputSpecimen s r = TxInputSpecimen {
+  txInputOut      :: TxOutSpecimen s,
+  txInputRedeemer :: Redeemer s}
 
-data TxMintInstance c where
-  TxMintInstance :: {
-    txMintValue :: Value c}
-    -> TxMintInstance c
+data TxMintSpecimen c = TxMintSpecimen {
+  txMintValue :: Value c}
 
-data WalletInstance c where
-  WalletInstance :: {
-    txInputWalletValue :: Value c}
-    -> WalletInstance s
+data WalletSpecimen c = WalletSpecimen {
+  txInputWalletValue :: Value c}
 
-data TxOutInstance s where
-  TxOutInstance :: ValidatorScript s => {
-    txOutDatum :: Datum s,
-    txOutValue :: Value (Currency s)}
-    -> TxOutInstance s
+data TxOutSpecimen s = TxOutSpecimen {
+  txOutDatum :: Datum s,
+  txOutValue :: Value (Currency s)}
 
 data Value currencies
 ~~~
 
-<!--
+We can use these definitions to generate concrete transactions
+
 ~~~ {.haskell}
-data PubKey
-data Signature
-data SlotRange
+exampleExchangeTransaction :: TxSpecimen ('Exchange 1 2)
+exampleExchangeTransaction = TxSpecimen {
+  txInputs = ExchangeInputs {
+    exchange = exampleExchangeInput,
+    oracle1 = exampleOracle1Input,
+    oracle2 = exampleOracle2Input,
+    wallet1 = exampleWallet1,
+    wallet2 = exampleWallet2},
+  txCollateral = exampleCollateralWallet,
+  txOutputs = ExchangeOutputs {
+    exchange = exampleExchangeOutput,
+    oracle1 = exampleOracle1Output,
+    oracle2 = exampleOracle2Output,
+    wallet1 = exampleWallet1,
+    wallet2 = exampleWallet2},
+  txMint = Const (),
+  txValidRange = undefined,
+  txFee = exampleFee,
+  txSignatures = Map.empty}
+
+exampleExchangeInput :: TxInputSpecimen 'CentralExchange '()
+exampleExchangeInput = TxInputSpecimen {
+  txInputOut = exampleExchangeOutput,
+  txInputRedeemer = ()}
+  
+exampleExchangeOutput = TxOutSpecimen {
+  txOutDatum = (),
+  txOutValue = undefined}
+
+exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Trade
+exampleOracle1Input = undefined
+exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Trade
+exampleOracle2Input = undefined
+
+exampleOracle1Output :: TxOutSpecimen ('Oracle 1)
+exampleOracle1Output = undefined
+exampleOracle2Output :: TxOutSpecimen ('Oracle 2)
+exampleOracle2Output = undefined
+
+exampleWallet1 :: WalletSpecimen ('Token 1 :+ 'Ada)
+exampleWallet1 = undefined
+exampleWallet2 :: WalletSpecimen ('Token 2 :+ 'Ada)
+exampleWallet2 = undefined
+exampleCollateralWallet :: WalletSpecimen 'CollateralAda
+exampleCollateralWallet = undefined
+
+exampleFee :: Value Ada
+exampleFee = undefined
 ~~~
--->
 
 ## Closing the family
 
