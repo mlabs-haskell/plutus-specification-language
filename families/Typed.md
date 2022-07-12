@@ -60,7 +60,7 @@ data TransactionFamily =
   UpdateOracle Natural
   | Exchange Natural Natural
   | DrainCollectedFees
-data Token = Ada | Token Natural | Token :+ Token
+data Token = Ada | Token Natural
 
 data OracleDatum = OracleDatum {
   priceInLovelace :: Natural,
@@ -70,7 +70,7 @@ data OracleDatum = OracleDatum {
 data OracleRedeemer = Trade | Update
 
 class ValidatorScript s where
-  type Currency s :: k
+  type Currencies s :: [k]
   type Datum s    :: Type
   type Redeemer s :: Type
 class Transaction (t :: familie) where
@@ -78,11 +78,11 @@ class Transaction (t :: familie) where
   type Outputs t :: [Type]
 
 instance ValidatorScript ('Oracle n) where
-  type Currency ('Oracle n) = 'Token n
+  type Currencies ('Oracle n) = '[ 'Token n ]
   type Datum ('Oracle n) = OracleDatum
   type Redeemer ('Oracle n) = OracleRedeemer
 instance ValidatorScript CentralExchange where
-  type Currency CentralExchange = 'Ada
+  type Currencies CentralExchange = '[ 'Ada ]
   type Datum CentralExchange = ()
   type Redeemer CentralExchange = ()
 
@@ -94,14 +94,14 @@ instance Transaction ('Exchange m n) where
     ScriptInput 'CentralExchange '(),
     ScriptInput ('Oracle m) 'Trade,
     ScriptInput ('Oracle n) 'Trade,
-    WalletInput ('Token m :+ 'Ada),
-    WalletInput ('Token n :+ 'Ada)]
+    WalletInput ['Token m, 'Ada],
+    WalletInput ['Token n, 'Ada]]
   type Outputs ('Exchange m n) = [
     ScriptOutput 'CentralExchange,
     ScriptOutput ('Oracle m),
     ScriptOutput ('Oracle n),
-    WalletOutput ('Token m),
-    WalletOutput ('Token n)]
+    WalletOutput '[ 'Token m ],
+    WalletOutput '[ 'Token n ]]
 instance Transaction 'DrainCollectedFees where
   type Inputs 'DrainCollectedFees = '[ScriptInput 'CentralExchange '()]
   type Outputs 'DrainCollectedFees = '[ScriptOutput 'CentralExchange]
@@ -117,7 +117,7 @@ otherwise reusable across different transaction families and DApps:
 
 ~~~ {.haskell.ignore}
 class ValidatorScript (script :: DApp) where
-  type Currency script :: Token
+  type Currencies script :: [Token]
   type Datum script :: Type
   type Redeemer script :: Type
 
@@ -136,8 +136,8 @@ type ScriptInput :: forall (script :: DApp) -> Redeemer script -> Type
 data ScriptInput script redeemer
 data ScriptOutput (script :: DApp)
 
-data WalletInput currency
-data WalletOutput currency
+data WalletInput currencies
+data WalletOutput currencies
 ~~~
 
 Unfortunately GHC's kinds other than `Type` turn out to be difficult to work with, so we'll replace the use of list
