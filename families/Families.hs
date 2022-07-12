@@ -8,7 +8,7 @@ import Data.Kind (Type)
 import Data.Map (Map)
 
 class ValidatorScript s where
-  type Currency s :: k
+  type Currencies s :: [k]
   type Datum s    :: Type
   type Redeemer s = (r :: Type) | r -> s
 
@@ -46,7 +46,7 @@ data WalletSpecimen c = WalletSpecimen {
 
 data TxOutSpecimen s = TxOutSpecimen {
   txOutDatum :: Datum s,
-  txOutValue :: Value (Currency s)}
+  txOutValue :: Value (Currencies s)}
 
 data Value currencies
 

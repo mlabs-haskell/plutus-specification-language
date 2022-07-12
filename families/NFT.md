@@ -25,7 +25,7 @@ data TransactionFamily =
   | Exchange Natural Natural
   | DrainCollectedFees
   | Initialize
-data Token = Ada | Token Natural | AuthNFT | Token :+ Token
+data Token = Ada | Token Natural | AuthNFT
 
 data OracleDatum = OracleDatum {
   priceInLovelace :: Natural,
@@ -35,7 +35,7 @@ data OracleDatum = OracleDatum {
 data OracleRedeemer = Trade | Update
 
 instance ValidatorScript CentralExchange where
-  type Currency CentralExchange = 'Ada :+ 'AuthNFT
+  type Currencies CentralExchange = '[ 'Ada, 'AuthNFT ]
   type Datum CentralExchange = ()
   type Redeemer CentralExchange = ()
 
