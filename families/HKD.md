@@ -27,7 +27,7 @@ reusable declarations into a library module:
 module Families where
 
 class ValidatorScript s where
-  type Currency s :: k
+  type Currencies s :: [k]
   type Datum s    :: Type
   type Redeemer s = (r :: Type) | r -> s
 
@@ -48,11 +48,6 @@ data Wallet c s w
 
 type InputWallet :: c -> (forall s -> Redeemer s -> Type) -> (c -> Type) -> Type
 data InputWallet c s w
-
-class ValidatorScript s where
-  type Currency s :: k
-  type Datum s    :: Type
-  type Redeemer s = (r :: Type) | r -> s
 ~~~
 
 The core project-specific datum and redeemer types don't change, nor do the `instance ValidatorScript` declarations.
@@ -73,11 +68,11 @@ data OracleDatum = OracleDatum {
 data OracleRedeemer (n :: Natural) = Trade | Update
 
 instance ValidatorScript ('Oracle n) where
-  type Currency ('Oracle n) = 'Token n
+  type Currencies ('Oracle n) = '[ 'Token n ]
   type Datum ('Oracle n) = OracleDatum
   type Redeemer ('Oracle n) = OracleRedeemer n
 instance ValidatorScript CentralExchange where
-  type Currency CentralExchange = 'Ada
+  type Currencies CentralExchange = '[ 'Ada ]
   type Datum CentralExchange = ()
   type Redeemer CentralExchange = ()
 ~~~
@@ -157,7 +152,7 @@ data WalletSpecimen c = WalletSpecimen {
 
 data TxOutSpecimen s = TxOutSpecimen {
   txOutDatum :: Datum s,
-  txOutValue :: Value (Currency s)}
+  txOutValue :: Value (Currencies s)}
 
 data Value currencies
 ~~~
