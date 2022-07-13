@@ -58,7 +58,7 @@ data TransactionFamily =
   UpdateOracle Natural
   | Exchange Natural Natural
   | DrainCollectedFees
-data Token = Ada | Token Natural | Token :+ Token
+data Token = Token Natural | ScriptAda
 
 data OracleDatum = OracleDatum {
   priceInLovelace :: Natural,
@@ -97,24 +97,24 @@ instance Transaction ('UpdateOracle n) where
   type Inputs ('UpdateOracle n) = UpdateOracleInputs n
   type Outputs ('UpdateOracle n) = UpdateOracleOutputs n
 
-type ExchangeInputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Redeemer s -> Type) -> (Token -> Type) -> Type
+type ExchangeInputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Redeemer s -> Type) -> ([Token] -> Type) -> Type
 data ExchangeInputs m n s w = ExchangeInputs {
   exchange :: s 'CentralExchange '(),
   oracle1 :: s ('Oracle m) 'Trade,
   oracle2 :: s ('Oracle n) 'Trade,
-  wallet1 :: w ('Token m :+ 'Ada),
-  wallet2 :: w ('Token n :+ 'Ada)}
+  wallet1 :: w ['Token m, 'ScriptAda],
+  wallet2 :: w ['Token n, 'ScriptAda]}
 data ExchangeOutputs m n s w = ExchangeOutputs {
   exchange :: s 'CentralExchange,
   oracle1 :: s ('Oracle m),
   oracle2 :: s ('Oracle n),
-  wallet1 :: w ('Token m :+ 'Ada),
-  wallet2 :: w ('Token n :+ 'Ada)}
+  wallet1 :: w ['Token m, 'ScriptAda],
+  wallet2 :: w ['Token n, 'ScriptAda]}
 instance Transaction ('Exchange m n) where
   type Inputs ('Exchange m n) = ExchangeInputs m n
   type Outputs ('Exchange m n) = ExchangeOutputs m n
 
-type DrainInputs :: (forall (s :: ExchangeDApp) -> Redeemer s -> Type) -> (Token -> Type) -> Type
+type DrainInputs :: (forall (s :: ExchangeDApp) -> Redeemer s -> Type) -> ([Token] -> Type) -> Type
 data DrainInputs s w = DrainInputs {
   echange :: s 'CentralExchange '()}
 data DrainOutputs s w = DrainOutputs {
@@ -154,7 +154,7 @@ data TxOutSpecimen s = TxOutSpecimen {
   txOutDatum :: Datum s,
   txOutValue :: Value (Currencies s)}
 
-data Value currencies
+data Value currencies = Value (NatMap currencies)
 ~~~
 
 We can use these definitions to generate concrete transactions
@@ -199,14 +199,14 @@ exampleOracle1Output = undefined
 exampleOracle2Output :: TxOutSpecimen ('Oracle 2)
 exampleOracle2Output = undefined
 
-exampleWallet1 :: WalletSpecimen ('Token 1 :+ 'Ada)
+exampleWallet1 :: WalletSpecimen ['Token 1, 'ScriptAda]
 exampleWallet1 = undefined
-exampleWallet2 :: WalletSpecimen ('Token 2 :+ 'Ada)
+exampleWallet2 :: WalletSpecimen ['Token 2, 'ScriptAda]
 exampleWallet2 = undefined
-exampleCollateralWallet :: WalletSpecimen 'CollateralAda
+exampleCollateralWallet :: WalletSpecimen Collateral
 exampleCollateralWallet = undefined
 
-exampleFee :: Value Ada
+exampleFee :: Value '[ 'Ada ]
 exampleFee = undefined
 ~~~
 
