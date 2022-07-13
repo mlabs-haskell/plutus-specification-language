@@ -37,10 +37,13 @@ type family DApp t
 type Economy :: fam -> Type
 type family Economy t
 
+class Economic e where
+  type AllCurrencies e :: [currency]
+
 class Transaction (t :: familie) where
-  type Inputs t  :: (forall s -> Redeemer s -> Type) -> (Economy t -> Type) -> Type
-  type Mints t   :: (c -> Type) -> Type
-  type Outputs t :: (DApp t -> Type) -> (Economy t -> Type) -> Type
+  type Inputs t  :: (forall s -> Redeemer s -> Type) -> ([Economy t] -> Type) -> Type
+  type Mints t   :: ([Economy t] -> Type) -> Type
+  type Outputs t :: (DApp t -> Type) -> ([Economy t] -> Type) -> Type
   type Mints t = Const ()
 
 type Wallet :: c -> k -> (c -> Type) -> Type
@@ -127,16 +130,17 @@ instance Transaction 'DrainCollectedFees where
 ## Building concrete transactions
 
 That was the pain, now for the gain. We can supply a specific type parameter for `Inputs` and `Outputs` of the
-transaction to fill in the details. Furthermore, the following definitions are also project-generic: 
+transaction to fill in the details. Furthermore, the following definitions are also project-generic and can be added
+to a library module:
 
 ~~~ {.haskell.ignore}
 data TxSpecimen t = TxSpecimen {
   txInputs :: Inputs t TxInputSpecimen WalletSpecimen,
-  txCollateral :: WalletSpecimen Ada,
+  txCollateral :: WalletSpecimen Collateral,
   txOutputs :: Outputs t TxOutSpecimen WalletSpecimen,
   txMint :: Mints t TxMintSpecimen,
   txValidRange :: !SlotRange,
-  txFee :: Value Ada,
+  txFee :: Value '[ 'Ada ],
   txSignatures :: Map PubKey Signature}
 
 type TxInputSpecimen :: forall (s :: script) -> Redeemer s -> Type
@@ -147,17 +151,23 @@ data TxInputSpecimen s r = TxInputSpecimen {
 data TxMintSpecimen c = TxMintSpecimen {
   txMintValue :: Value c}
 
-data WalletSpecimen c = WalletSpecimen {
-  txInputWalletValue :: Value c}
+data WalletSpecimen e = WalletSpecimen {
+  txInputWalletValue :: Value (AllCurrencies e)}
 
 data TxOutSpecimen s = TxOutSpecimen {
   txOutDatum :: Datum s,
   txOutValue :: Value (Currencies s)}
 
+type Value :: [currency] -> Type
 data Value currencies = Value (NatMap currencies)
+
+type NatMap :: [t] -> Type
+type family NatMap xs where
+  NatMap '[] = ()
+  NatMap (x ': xs) = (Natural, NatMap xs)
 ~~~
 
-We can use these definitions to generate concrete transactions
+These type definitions can be used to generate concrete transactions as in the following example:
 
 ~~~ {.haskell}
 exampleExchangeTransaction :: TxSpecimen ('Exchange 1 2)
@@ -209,6 +219,9 @@ exampleCollateralWallet = undefined
 exampleFee :: Value '[ 'Ada ]
 exampleFee = undefined
 ~~~
+
+We can proceed to erase the types and turn the `exampleExchangeTransaction` into a proper Cardano transaction and
+submit it. This would improve the type-safety of the off-chain code.
 
 ## Closing the family
 
