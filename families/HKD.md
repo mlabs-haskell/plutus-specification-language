@@ -2,8 +2,10 @@
 
 <!--
 ~~~ {.haskell}
-{-# LANGUAGE DataKinds, DuplicateRecordFields, GADTs, ExplicitForAll, KindSignatures, StandaloneKindSignatures,
-             MultiParamTypeClasses, NoStarIsType, PolyKinds, RankNTypes, TypeFamilies, TypeOperators #-}
+{-# LANGUAGE DataKinds, DuplicateRecordFields, GADTs, FlexibleInstances,
+             KindSignatures, StandaloneKindSignatures,
+             MultiParamTypeClasses, NoStarIsType, NumericUnderscores,
+             PolyKinds, RankNTypes, TypeApplications, TypeFamilies, TypeOperators #-}
 
 module HKD where
 
@@ -11,12 +13,11 @@ import Data.Functor.Const (Const (Const))
 import Data.Kind (Type)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Proxy (Proxy (Proxy))
 import Numeric.Natural (Natural)
 
 import Families
-
-data POSIXTime
-
+import Ledger (POSIXTime (POSIXTime), always)
 ~~~
 -->
 
@@ -89,6 +90,8 @@ data ExchangeDApp = Oracle Natural | CentralExchange
 
 type instance DApp (t :: TransactionFamily) = ExchangeDApp
 type instance Economy (t :: TransactionFamily) = Token
+instance Economic t where
+  type AllCurrencies t = ['Token 1, 'Token 2, 'ScriptAda]
 
 type UpdateOracleInputs :: Natural -> (forall (s :: ExchangeDApp) -> Redeemer s -> Type) -> (c -> Type) -> Type
 data UpdateOracleInputs n s w = UpdateOracleInputs {
@@ -176,17 +179,17 @@ exampleExchangeTransaction = TxSpecimen {
     exchange = exampleExchangeInput,
     oracle1 = exampleOracle1Input,
     oracle2 = exampleOracle2Input,
-    wallet1 = exampleWallet1,
-    wallet2 = exampleWallet2},
+    wallet1 = exampleWallet1Input,
+    wallet2 = exampleWallet2Input},
   txCollateral = exampleCollateralWallet,
   txOutputs = ExchangeOutputs {
     exchange = exampleExchangeOutput,
     oracle1 = exampleOracle1Output,
     oracle2 = exampleOracle2Output,
-    wallet1 = exampleWallet1,
-    wallet2 = exampleWallet2},
+    wallet1 = exampleWallet1Output,
+    wallet2 = exampleWallet2Output},
   txMint = Const (),
-  txValidRange = undefined,
+  txValidRange = always,
   txFee = exampleFee,
   txSignatures = Map.empty}
 
@@ -195,24 +198,63 @@ exampleExchangeInput = TxInputSpecimen {
   txInputOut = exampleExchangeOutput,
   txInputRedeemer = ()}
   
+exampleExchangeOutput :: TxOutSpecimen 'CentralExchange
 exampleExchangeOutput = TxOutSpecimen {
   txOutDatum = (),
-  txOutValue = undefined}
+  txOutValue = Value (3_000_000 :$ Proxy @'Ada)}
 
 exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Trade
-exampleOracle1Input = undefined
+exampleOracle1Input = TxInputSpecimen {
+  txInputOut = TxOutSpecimen {
+    txOutDatum = OracleDatum {
+      priceInLovelace = 45,
+      maxTradeVolume = 5_000,
+      expiry = 20_000_000},
+    txOutValue = Value (1 :$ Proxy @('Token 1))},
+  txInputRedeemer = Trade}
+
 exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Trade
-exampleOracle2Input = undefined
+exampleOracle2Input = TxInputSpecimen {
+  txInputOut = TxOutSpecimen {
+    txOutDatum = OracleDatum {
+      priceInLovelace = 60,
+      maxTradeVolume = 10_000,
+      expiry = 20_000_000},
+    txOutValue = Value (1 :$ Proxy @('Token 2))},
+  txInputRedeemer = Trade}
 
 exampleOracle1Output :: TxOutSpecimen ('Oracle 1)
-exampleOracle1Output = undefined
-exampleOracle2Output :: TxOutSpecimen ('Oracle 2)
-exampleOracle2Output = undefined
+exampleOracle1Output = TxOutSpecimen {
+  txOutDatum = OracleDatum {
+    priceInLovelace = 45,
+    maxTradeVolume = 3_000,
+    expiry = 20_000_000},
+  txOutValue = Value (1 :$ Proxy @('Token 1))}
 
-exampleWallet1 :: WalletSpecimen ['Token 1, 'ScriptAda]
-exampleWallet1 = undefined
-exampleWallet2 :: WalletSpecimen ['Token 2, 'ScriptAda]
-exampleWallet2 = undefined
+exampleOracle2Output :: TxOutSpecimen ('Oracle 2)
+exampleOracle2Output = TxOutSpecimen {
+  txOutDatum = OracleDatum {
+    priceInLovelace = 60,
+    maxTradeVolume = 8_500,
+    expiry = 20_000_000},
+  txOutValue = Value (1 :$ Proxy @('Token 2))}
+
+exampleWallet1Input :: WalletSpecimen ['Token 1, 'ScriptAda]
+exampleWallet1Input = WalletSpecimen (Value (4_000 :$ Proxy @('Token 1) :+
+                                                 0 :$ Proxy @('Token 2) :+ 4_000 :$ Proxy @ScriptAda))
+
+exampleWallet1Output :: WalletSpecimen ['Token 1, 'ScriptAda]
+exampleWallet1Output = WalletSpecimen (Value (2_000 :$ Proxy @('Token 1) :+
+                                              1_500 :$ Proxy @('Token 2) :+ 4_000 :$ Proxy @ScriptAda))
+
+exampleWallet2Input :: WalletSpecimen ['Token 2, 'ScriptAda]
+exampleWallet2Input = WalletSpecimen (Value (    0 :$ Proxy @('Token 1) :+
+                                             4_000 :$ Proxy @('Token 2) :+ 4_000 :$ Proxy @ScriptAda))
+
+exampleWallet2Output :: WalletSpecimen ['Token 2, 'ScriptAda]
+exampleWallet2Output = WalletSpecimen (Value (2_000 :$ Proxy @('Token 1) :+
+                                              2_500 :$ Proxy @('Token 2) :+ 4_000 :$ Proxy @ScriptAda))
+
 exampleCollateralWallet :: WalletSpecimen Collateral
 exampleCollateralWallet = undefined
 
