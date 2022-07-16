@@ -1,4 +1,5 @@
-{-# LANGUAGE DataKinds, ExplicitForAll, ExistentialQuantification, PolyKinds, RankNTypes, StandaloneKindSignatures,
+{-# LANGUAGE DataKinds, ExplicitForAll, GADTs,
+             PolyKinds, RankNTypes, StandaloneKindSignatures,
              TypeFamilies, TypeFamilyDependencies, TypeOperators #-}
 
 module Families where
@@ -7,6 +8,8 @@ import Data.Functor.Const (Const)
 import Data.Kind (Type)
 import Data.Map (Map)
 import Numeric.Natural (Natural)
+import Data.Proxy (Proxy)
+import Ledger (PubKey, Signature, SlotRange)
 
 class ValidatorScript s where
   type Currencies s :: [k]
@@ -53,12 +56,16 @@ data TxOutSpecimen s = TxOutSpecimen {
   txOutValue :: Value (Currencies s)}
 
 type Value :: [currency] -> Type
-data Value currencies = Value (NatMap currencies)
+data Value currencies = Value (AmountsOf currencies)
 
-type NatMap :: [t] -> Type
-type family NatMap xs where
-  NatMap '[] = ()
-  NatMap (x ': xs) = (Natural, NatMap xs)
+type AmountsOf :: [c] -> Type
+data AmountsOf currencies where
+  Destitute :: AmountsOf '[]
+  (:$) :: Natural -> Proxy c -> AmountsOf '[c]
+  (:+) :: AmountsOf '[c] -> AmountsOf cs -> AmountsOf (c ': cs)
+
+infixr 3 :$
+infixr 2 :+
 
 data Ada = Ada
 
@@ -69,7 +76,3 @@ data Wallet c s w
 
 type InputWallet :: c -> (forall s -> Redeemer s -> Type) -> (c -> Type) -> Type
 data InputWallet c s w
-
-data PubKey
-data Signature
-data SlotRange
