@@ -2,7 +2,7 @@
 
 <!--
 ~~~ {.haskell}
-{-# LANGUAGE DataKinds, DuplicateRecordFields, GADTs, FlexibleInstances,
+{-# LANGUAGE DataKinds, DuplicateRecordFields, GADTs, FlexibleInstances, OverloadedStrings,
              KindSignatures, StandaloneKindSignatures,
              MultiParamTypeClasses, NoStarIsType, NumericUnderscores,
              PolyKinds, RankNTypes, TypeApplications, TypeFamilies, TypeOperators #-}
@@ -17,7 +17,7 @@ import Data.Proxy (Proxy (Proxy))
 import Numeric.Natural (Natural)
 
 import Families
-import Ledger (POSIXTime (POSIXTime), always)
+import Ledger (POSIXTime (POSIXTime), PubKey, always)
 ~~~
 -->
 
@@ -37,9 +37,6 @@ type family DApp t
 
 type Economy :: fam -> Type
 type family Economy t
-
-class Economic e where
-  type AllCurrencies e :: [currency]
 
 class Transaction (t :: familie) where
   type Inputs t  :: (forall s -> Redeemer s -> Type) -> ([Economy t] -> Type) -> Type
@@ -90,8 +87,6 @@ data ExchangeDApp = Oracle Natural | CentralExchange
 
 type instance DApp (t :: TransactionFamily) = ExchangeDApp
 type instance Economy (t :: TransactionFamily) = Token
-instance Economic t where
-  type AllCurrencies t = ['Token 1, 'Token 2, 'ScriptAda]
 
 type UpdateOracleInputs :: Natural -> (forall (s :: ExchangeDApp) -> Redeemer s -> Type) -> (c -> Type) -> Type
 data UpdateOracleInputs n s w = UpdateOracleInputs {
@@ -108,14 +103,14 @@ data ExchangeInputs m n s w = ExchangeInputs {
   exchange :: s 'CentralExchange '(),
   oracle1 :: s ('Oracle m) 'Trade,
   oracle2 :: s ('Oracle n) 'Trade,
-  wallet1 :: w ['Token m, 'ScriptAda],
-  wallet2 :: w ['Token n, 'ScriptAda]}
+  wallet1 :: w '[ 'Token m ],
+  wallet2 :: w ' ['Token n ]}
 data ExchangeOutputs m n s w = ExchangeOutputs {
   exchange :: s 'CentralExchange,
   oracle1 :: s ('Oracle m),
   oracle2 :: s ('Oracle n),
-  wallet1 :: w ['Token m, 'ScriptAda],
-  wallet2 :: w ['Token n, 'ScriptAda]}
+  wallet1 :: w '[ 'Token n ],
+  wallet2 :: w '[ 'Token m ]}
 instance Transaction ('Exchange m n) where
   type Inputs ('Exchange m n) = ExchangeInputs m n
   type Outputs ('Exchange m n) = ExchangeOutputs m n
@@ -155,7 +150,7 @@ data TxMintSpecimen c = TxMintSpecimen {
   txMintValue :: Value c}
 
 data WalletSpecimen e = WalletSpecimen {
-  txInputWalletValue :: Value (AllCurrencies e)}
+  walletPubKey :: PubKey}
 
 data TxOutSpecimen s = TxOutSpecimen {
   txOutDatum :: Datum s,
@@ -239,21 +234,21 @@ exampleOracle2Output = TxOutSpecimen {
     expiry = 20_000_000},
   txOutValue = Value (1 :$ Proxy @('Token 2))}
 
-exampleWallet1Input :: WalletSpecimen ['Token 1, 'ScriptAda]
-exampleWallet1Input = WalletSpecimen (Value (4_000 :$ Proxy @('Token 1) :+
-                                                 0 :$ Proxy @('Token 2) :+ 4_000 :$ Proxy @ScriptAda))
+exampleWallet1Input :: WalletSpecimen '[ 'Token 1 ]
+exampleWallet1Input = WalletSpecimen pubKey1
 
-exampleWallet1Output :: WalletSpecimen ['Token 1, 'ScriptAda]
-exampleWallet1Output = WalletSpecimen (Value (2_000 :$ Proxy @('Token 1) :+
-                                              1_500 :$ Proxy @('Token 2) :+ 4_000 :$ Proxy @ScriptAda))
+exampleWallet1Output :: WalletSpecimen '[ 'Token 2 ]
+exampleWallet1Output = WalletSpecimen pubKey1
 
-exampleWallet2Input :: WalletSpecimen ['Token 2, 'ScriptAda]
-exampleWallet2Input = WalletSpecimen (Value (    0 :$ Proxy @('Token 1) :+
-                                             4_000 :$ Proxy @('Token 2) :+ 4_000 :$ Proxy @ScriptAda))
+exampleWallet2Input :: WalletSpecimen '[ 'Token 2 ]
+exampleWallet2Input = WalletSpecimen pubKey2
 
-exampleWallet2Output :: WalletSpecimen ['Token 2, 'ScriptAda]
-exampleWallet2Output = WalletSpecimen (Value (2_000 :$ Proxy @('Token 1) :+
-                                              2_500 :$ Proxy @('Token 2) :+ 4_000 :$ Proxy @ScriptAda))
+exampleWallet2Output :: WalletSpecimen '[ 'Token 1 ]
+exampleWallet2Output = WalletSpecimen pubKey2
+
+pubKey1, pubKey2 :: PubKey
+pubKey1 = "wallet1"
+pubKey2 = "wallet2"
 
 exampleCollateralWallet :: WalletSpecimen Collateral
 exampleCollateralWallet = undefined

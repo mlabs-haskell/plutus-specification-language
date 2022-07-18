@@ -1,7 +1,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Ledger where
 
-data PubKey
+import Data.ByteString (ByteString)
+import Data.String (IsString)
+
+newtype PubKey = PubKey {getPubKey :: LedgerBytes} deriving (Eq, IsString, Show)
+newtype LedgerBytes = LedgerBytes {getLedgerBytes :: BuiltinByteString} deriving (Eq, IsString, Show)
+newtype BuiltinByteString = BuiltinByteString ByteString deriving (Eq, IsString, Show)
+
 data Signature
 
 newtype POSIXTime = POSIXTime {getPOSIXTime :: Integer} deriving (Eq, Ord, Num)
