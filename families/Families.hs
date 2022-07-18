@@ -22,9 +22,6 @@ type family DApp t
 type Economy :: fam -> Type
 type family Economy t
 
-class Economic e where
-  type AllCurrencies e :: [currency]
-
 class Transaction (t :: familie) where
   type Inputs t  :: (forall s -> Redeemer s -> Type) -> ([Economy t] -> Type) -> Type
   type Mints t   :: (c -> Type) -> Type
@@ -49,7 +46,7 @@ data TxMintSpecimen c = TxMintSpecimen {
   txMintValue :: Value c}
 
 data WalletSpecimen e = WalletSpecimen {
-  txInputWalletValue :: Value (AllCurrencies e)}
+  walletPubKey :: PubKey}
 
 data TxOutSpecimen s = TxOutSpecimen {
   txOutDatum :: Datum s,
