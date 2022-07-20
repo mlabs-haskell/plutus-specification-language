@@ -125,6 +125,10 @@ instance Transaction 'DrainCollectedFees where
   type Outputs 'DrainCollectedFees = DrainOutputs
 ~~~
 
+## Graphing the transaction diagram
+
+[Diagram](Diagram.md)
+
 ## Building concrete transactions
 
 That was the pain, now for the gain. We can supply a specific type parameter for `Inputs` and `Outputs` of the
