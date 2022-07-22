@@ -26,6 +26,6 @@ test-suite doc
   main-is:            TransactionFamily.lhs
   other-modules:      Families, Ledger, Typed, HKD, NFT, Diagram
   ghc-options:        -pgmL markdown-unlit
-  build-depends:      base, bytestring, containers, generic-deriving, fgl, graphviz >= 2999.10
+  build-depends:      base, bytestring, containers, text, fgl, graphviz >= 2999.10
   build-tool-depends: markdown-unlit:markdown-unlit
   default-language:   Haskell2010
