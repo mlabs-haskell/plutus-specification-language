@@ -11,8 +11,6 @@ import Data.Kind (Type)
 import Data.Map (Map)
 import Numeric.Natural (Natural)
 
-import Families
-
 data POSIXTime
 
 ~~~
@@ -71,34 +69,42 @@ data OracleDatum = OracleDatum {
   }
 data OracleRedeemer = Trade | Update
 
+class ValidatorScript s where
+  type Currencies s :: [k]
+  type Datum s    :: Type
+  type Redeemer s :: Type
+class Transaction (t :: familie) where
+  type Inputs t  :: [Type]
+  type Outputs t :: [Type]
+
 instance ValidatorScript ('Oracle n) where
-  type Currency ('Oracle n) = 'Token n
+  type Currencies ('Oracle n) = '[ 'Token n ]
   type Datum ('Oracle n) = OracleDatum
   type Redeemer ('Oracle n) = OracleRedeemer
 instance ValidatorScript CentralExchange where
-  type Currency CentralExchange = 'Ada
+  type Currencies CentralExchange = '[ 'Ada ]
   type Datum CentralExchange = ()
   type Redeemer CentralExchange = ()
 
 instance Transaction ('UpdateOracle n) where
-  type Inputs ('UpdateOracle n) = '[Input ('Oracle n) 'Update]
-  type Outputs ('UpdateOracle n) = '[Output ('Oracle n)]
+  type Inputs ('UpdateOracle n) = '[ScriptInput ('Oracle n) 'Update]
+  type Outputs ('UpdateOracle n) = '[ScriptOutput ('Oracle n)]
 instance Transaction ('Exchange m n) where
   type Inputs ('Exchange m n) = [
-    Input 'CentralExchange '(),
-    Input ('Oracle m) 'Trade,
-    Input ('Oracle n) 'Trade,
-    WalletInput ('Token m :+ 'Ada),
-    WalletInput ('Token n :+ 'Ada)]
+    ScriptInput 'CentralExchange '(),
+    ScriptInput ('Oracle m) 'Trade,
+    ScriptInput ('Oracle n) 'Trade,
+    WalletInput ['Token m, 'Ada],
+    WalletInput ['Token n, 'Ada]]
   type Outputs ('Exchange m n) = [
-    Output 'CentralExchange,
-    Output ('Oracle m),
-    Output ('Oracle n),
-    WalletOutput ('Token m),
-    WalletOutput ('Token n)]
+    ScriptOutput 'CentralExchange,
+    ScriptOutput ('Oracle m),
+    ScriptOutput ('Oracle n),
+    WalletOutput '[ 'Token m ],
+    WalletOutput '[ 'Token n ]]
 instance Transaction 'DrainCollectedFees where
-  type Inputs 'DrainCollectedFees = '[Input 'CentralExchange '()]
-  type Outputs 'DrainCollectedFees = '[Output 'CentralExchange]
+  type Inputs 'DrainCollectedFees = '[ScriptInput 'CentralExchange '()]
+  type Outputs 'DrainCollectedFees = '[ScriptOutput 'CentralExchange]
 ~~~
 
 The above declarations are already something that could be automatically
@@ -111,7 +117,7 @@ otherwise reusable across different transaction families and DApps:
 
 ~~~ {.haskell.ignore}
 class ValidatorScript (script :: DApp) where
-  type Currency script :: Token
+  type Currencies script :: [Token]
   type Datum script :: Type
   type Redeemer script :: Type
 
@@ -126,30 +132,13 @@ Note the dependent kind quantification here, necessary because the redeemer
 type depends on the script:
 
 ~~~ {.haskell}
-type Input :: forall (script :: DApp) -> Redeemer script -> Type
-data Input script redeemer = Input
-data Output (script :: DApp)
+type ScriptInput :: forall (script :: DApp) -> Redeemer script -> Type
+data ScriptInput script redeemer
+data ScriptOutput (script :: DApp)
 
-data WalletInput currency
-data WalletOutput currency
-
-data c1 :+ c2
+data WalletInput currencies
+data WalletOutput currencies
 ~~~
 
-Is this transaction family open or closed? A most likely design would have the
-oracles open to other exchanges and other kinds of dApps, so at least the
-`Trade` redeemer would be accessible to anyone. However there is no value in any
-`Value` locked by an oracle, so this opening is not much of a vulnerability
-itself. We just need to ensure that every oracle verifies that its
-`priceInLovelace` cannot be changed by any transaction using this redeemer.
-
-The `CentralExchange` script on the other hand would likely be parameterized
-by a whitelist of accepted oracles. Unfortunately the same method can't be
-applied in the opposite direction: if we tried to *also* supply the
-`CentralExchange` script address as a parameter to every oracle there'd be a
-cyclic dependency. We can't close the type family this way.
-
-One workaround is to use an NFT whose sole token is carried by our
-`CentralExchange`. The NFT identity can be supplied as a parameter to every
-oracle as well as the exchange, so there's no cyclic dependency. With this
-addition we can close our dApp so it looks [as follows](NFT.md).
+Unfortunately GHC's kinds other than `Type` turn out to be difficult to work with, so we'll replace the use of list
+kinds with [Higher-Kinded Data](HKD.md).
