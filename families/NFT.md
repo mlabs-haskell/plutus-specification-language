@@ -8,6 +8,7 @@
 
 module NFT where
 
+import Data.Functor.Const (Const)
 import Data.Kind (Type)
 import Data.Map (Map)
 import Numeric.Natural (Natural)
@@ -18,13 +19,13 @@ data POSIXTime
 -->
 
 ~~~ {.haskell}
-data DApp = Oracle Natural | CentralExchange
+data MyDApp = Oracle Natural | CentralExchange
 data TransactionFamily =
   UpdateOracle Natural
   | Exchange Natural Natural
   | DrainCollectedFees
   | Initialize
-data Token = Ada | Token Natural | AuthNFT | Token :+ Token
+data Token = Token Natural | AuthNFT | ScriptAda
 
 data OracleDatum = OracleDatum {
   priceInLovelace :: Natural,
@@ -32,26 +33,18 @@ data OracleDatum = OracleDatum {
   expiry :: POSIXTime
   }
 data OracleRedeemer = Trade | Update
-~~~
 
-<!--
-~~~ {.haskell}
-type Input :: forall (script :: DApp) -> Redeemer script -> Type
-data Input script redeemer = Input
-data Output (script :: DApp)
-
-data WalletInput currency
-data WalletOutput currency
-~~~
--->
-
-~~~ {.haskell}
 instance ValidatorScript CentralExchange where
-  type Currency CentralExchange = 'Ada :+ 'AuthNFT
+  type Currencies CentralExchange = ['ScriptAda, 'AuthNFT]
   type Datum CentralExchange = ()
   type Redeemer CentralExchange = ()
 
+type instance DApp 'Initialize = MyDApp
+type instance Economy 'Initialize = Token
+
+data InititalizeOutputs s w = InititalizeOutputs {
+  exchange :: s 'CentralExchange}
 instance Transaction 'Initialize where
-  type Inputs 'Initialize = '[WalletInput 'Ada]
-  type Outputs 'Initialize = '[Output 'CentralExchange]
+  type Inputs 'Initialize = InputWallet '[ 'ScriptAda ]
+  type Outputs 'Initialize = InititalizeOutputs
 ~~~
