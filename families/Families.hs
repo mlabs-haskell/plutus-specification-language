@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds, ExplicitForAll, GADTs,
              PolyKinds, RankNTypes, StandaloneKindSignatures,
-             TypeFamilies, TypeFamilyDependencies, TypeOperators #-}
+             TypeFamilies, TypeFamilyDependencies, TypeOperators,
+             UndecidableInstances #-}
 
 module Families where
 
@@ -23,9 +24,9 @@ type Economy :: fam -> Type
 type family Economy t
 
 class Transaction (t :: familie) where
-  type Inputs t  :: (forall s -> Redeemer s -> Type) -> ([Economy t] -> Type) -> Type
-  type Mints t   :: (c -> Type) -> Type
-  type Outputs t :: (DApp t -> Type) -> ([Economy t] -> Type) -> Type
+  type Inputs t  :: (forall (s :: DApp t) -> Redeemer s -> [Economy t] -> Type) -> ([Economy t] -> Type) -> Type
+  type Mints t   :: ([Economy t] -> Type) -> Type
+  type Outputs t :: (DApp t -> [Economy t] -> Type) -> ([Economy t] -> Type) -> Type
   type Mints t = Const ()
 
 data TxSpecimen t = TxSpecimen {
@@ -37,20 +38,20 @@ data TxSpecimen t = TxSpecimen {
   txFee :: Value '[ 'Ada ],
   txSignatures :: Map PubKey Signature}
 
-type TxInputSpecimen :: forall (s :: script) -> Redeemer s -> Type
-data TxInputSpecimen s r = TxInputSpecimen {
-  txInputOut      :: TxOutSpecimen s,
+type TxInputSpecimen :: forall (s :: script) -> Redeemer s -> [currency] -> Type
+data TxInputSpecimen s r e = TxInputSpecimen {
+  txInputOut      :: TxOutSpecimen s e,
   txInputRedeemer :: Redeemer s}
 
-data TxMintSpecimen c = TxMintSpecimen {
-  txMintValue :: Value c}
+data TxMintSpecimen e = TxMintSpecimen {
+  txMintValue :: Value e}
 
 data WalletSpecimen e = WalletSpecimen {
   walletPubKey :: PubKey}
 
-data TxOutSpecimen s = TxOutSpecimen {
+data TxOutSpecimen s e = TxOutSpecimen {
   txOutDatum :: Datum s,
-  txOutValue :: Value (Currencies s)}
+  txOutValue :: Value e}
 
 type Value :: [currency] -> Type
 data Value currencies = Value (AmountsOf currencies)
@@ -71,5 +72,5 @@ data Collateral = CollateralAda
 type Wallet :: c -> k -> (c -> Type) -> Type
 data Wallet c s w
 
-type InputWallet :: c -> (forall s -> Redeemer s -> Type) -> (c -> Type) -> Type
+type InputWallet :: c -> (forall s -> Redeemer s -> c -> Type) -> (c -> Type) -> Type
 data InputWallet c s w

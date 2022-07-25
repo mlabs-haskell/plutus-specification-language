@@ -88,41 +88,44 @@ data ExchangeDApp = Oracle Natural | CentralExchange
 type instance DApp (t :: TransactionFamily) = ExchangeDApp
 type instance Economy (t :: TransactionFamily) = Token
 
-type UpdateOracleInputs :: Natural -> (forall (s :: ExchangeDApp) -> Redeemer s -> Type) -> (c -> Type) -> Type
+type UpdateOracleInputs :: Natural -> (forall (s :: ExchangeDApp) -> Redeemer s -> [Token] -> Type) -> (c -> Type) -> Type
 data UpdateOracleInputs n s w = UpdateOracleInputs {
-  oracle :: s ('Oracle n) 'Update}
-type UpdateOracleOutputs :: Natural -> (ExchangeDApp -> Type) -> (c -> Type) -> Type
+  oracle :: s ('Oracle n) 'Update ['Token n, 'ScriptAda]}
+type UpdateOracleOutputs :: Natural -> (ExchangeDApp -> [Token] -> Type) -> (c -> Type) -> Type
 data UpdateOracleOutputs n s w = UpdateOracleOutputs {
-  oracle :: s ('Oracle n)}
+  oracle :: s ('Oracle n) ['Token n, 'ScriptAda]}
 instance Transaction ('UpdateOracle n) where
   type Inputs ('UpdateOracle n) = UpdateOracleInputs n
   type Outputs ('UpdateOracle n) = UpdateOracleOutputs n
 
-type ExchangeInputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Redeemer s -> Type) -> ([Token] -> Type) -> Type
+type ExchangeInputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Redeemer s -> [Token] -> Type) -> ([Token] -> Type) -> Type
 data ExchangeInputs m n s w = ExchangeInputs {
-  exchange :: s 'CentralExchange '(),
-  oracle1 :: s ('Oracle m) 'Trade,
-  oracle2 :: s ('Oracle n) 'Trade,
+  exchange :: s 'CentralExchange '() '[],
+  oracle1 :: s ('Oracle m) 'Trade '[ 'Token m ],
+  oracle2 :: s ('Oracle n) 'Trade '[ 'Token n ],
   wallet1 :: w '[ 'Token m ],
   wallet2 :: w ' ['Token n ]}
 data ExchangeOutputs m n s w = ExchangeOutputs {
-  exchange :: s 'CentralExchange,
-  oracle1 :: s ('Oracle m),
-  oracle2 :: s ('Oracle n),
+  exchange :: s 'CentralExchange ['Token m, 'Token n, 'ScriptAda],
+  oracle1 :: s ('Oracle m) '[ 'Token m, 'ScriptAda ],
+  oracle2 :: s ('Oracle n) '[ 'Token n, 'ScriptAda ],
   wallet1 :: w '[ 'Token n ],
   wallet2 :: w '[ 'Token m ]}
 instance Transaction ('Exchange m n) where
   type Inputs ('Exchange m n) = ExchangeInputs m n
   type Outputs ('Exchange m n) = ExchangeOutputs m n
 
-type DrainInputs :: (forall (s :: ExchangeDApp) -> Redeemer s -> Type) -> ([Token] -> Type) -> Type
+type DrainInputs :: (forall (s :: ExchangeDApp) -> Redeemer s -> [Token] -> Type) -> ([Token] -> Type) -> Type
 data DrainInputs s w = DrainInputs {
-  echange :: s 'CentralExchange '()}
+  exchange :: s 'CentralExchange '() ['Token 1, 'Token 2, 'Token 3]}
 data DrainOutputs s w = DrainOutputs {
-  echange :: s 'CentralExchange}
+  exchange :: s 'CentralExchange '[ 'ScriptAda ]}
 instance Transaction 'DrainCollectedFees where
   type Inputs 'DrainCollectedFees = DrainInputs
   type Outputs 'DrainCollectedFees = DrainOutputs
+
+minAda :: AmountsOf '[ 'ScriptAda ]
+minAda = 2_000_000 :$ Proxy @'ScriptAda
 ~~~
 
 ## Graphing the transaction diagram
@@ -192,17 +195,19 @@ exampleExchangeTransaction = TxSpecimen {
   txFee = exampleFee,
   txSignatures = Map.empty}
 
-exampleExchangeInput :: TxInputSpecimen 'CentralExchange '()
+exampleExchangeInput :: TxInputSpecimen 'CentralExchange '() '[]
 exampleExchangeInput = TxInputSpecimen {
-  txInputOut = exampleExchangeOutput,
+  txInputOut = TxOutSpecimen {
+    txOutDatum = (),
+    txOutValue = Value Destitute},
   txInputRedeemer = ()}
   
-exampleExchangeOutput :: TxOutSpecimen 'CentralExchange
+exampleExchangeOutput :: TxOutSpecimen 'CentralExchange ['Token 1, 'Token 2, 'ScriptAda]
 exampleExchangeOutput = TxOutSpecimen {
   txOutDatum = (),
-  txOutValue = Value (3_000_000 :$ Proxy @'Ada)}
+  txOutValue = Value (1 :$ Proxy @('Token 1) :+ 1 :$ Proxy @('Token 2) :+ 3_000_000 :$ Proxy @'ScriptAda)}
 
-exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Trade
+exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Trade '[ 'Token 1 ]
 exampleOracle1Input = TxInputSpecimen {
   txInputOut = TxOutSpecimen {
     txOutDatum = OracleDatum {
@@ -212,7 +217,7 @@ exampleOracle1Input = TxInputSpecimen {
     txOutValue = Value (1 :$ Proxy @('Token 1))},
   txInputRedeemer = Trade}
 
-exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Trade
+exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Trade '[ 'Token 2 ]
 exampleOracle2Input = TxInputSpecimen {
   txInputOut = TxOutSpecimen {
     txOutDatum = OracleDatum {
@@ -222,21 +227,21 @@ exampleOracle2Input = TxInputSpecimen {
     txOutValue = Value (1 :$ Proxy @('Token 2))},
   txInputRedeemer = Trade}
 
-exampleOracle1Output :: TxOutSpecimen ('Oracle 1)
+exampleOracle1Output :: TxOutSpecimen ('Oracle 1) ['Token 1, 'ScriptAda ]
 exampleOracle1Output = TxOutSpecimen {
   txOutDatum = OracleDatum {
     priceInLovelace = 45,
     maxTradeVolume = 3_000,
     expiry = 20_000_000},
-  txOutValue = Value (1 :$ Proxy @('Token 1))}
+  txOutValue = Value (1 :$ Proxy @('Token 1) :+ minAda)}
 
-exampleOracle2Output :: TxOutSpecimen ('Oracle 2)
+exampleOracle2Output :: TxOutSpecimen ('Oracle 2) ['Token 2, 'ScriptAda]
 exampleOracle2Output = TxOutSpecimen {
   txOutDatum = OracleDatum {
     priceInLovelace = 60,
     maxTradeVolume = 8_500,
     expiry = 20_000_000},
-  txOutValue = Value (1 :$ Proxy @('Token 2))}
+  txOutValue = Value (1 :$ Proxy @('Token 2) :+ minAda)}
 
 exampleWallet1Input :: WalletSpecimen '[ 'Token 1 ]
 exampleWallet1Input = WalletSpecimen pubKey1
