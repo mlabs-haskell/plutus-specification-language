@@ -43,7 +43,7 @@ type instance DApp 'Initialize = MyDApp
 type instance Economy 'Initialize = Token
 
 data InititalizeOutputs s w = InititalizeOutputs {
-  exchange :: s 'CentralExchange}
+  exchange :: s 'CentralExchange '[ 'AuthNFT ]}
 instance Transaction 'Initialize where
   type Inputs 'Initialize = InputWallet '[ 'ScriptAda ]
   type Outputs 'Initialize = InititalizeOutputs

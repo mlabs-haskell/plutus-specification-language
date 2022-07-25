@@ -1,7 +1,7 @@
 # Typing transaction families as HKDs
 
 ~~~ {.haskell}
-{-# LANGUAGE NamedFieldPuns, OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, NamedFieldPuns, OverloadedStrings #-}
 module Diagram where
 
 import Families (Transaction)
@@ -11,7 +11,9 @@ import Data.List (nub)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Foldable (toList)
+import Data.String (IsString)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Graph.Inductive (Gr, mkGraph)
 import Data.GraphViz (DotGraph, GraphvizParams, GraphvizOutput (Plain), defaultParams, graphToDot, preview, runGraphviz)
 
@@ -29,19 +31,19 @@ exchangeTypeDiagram :: TransactionTypeDiagram
 exchangeTypeDiagram = TransactionTypeDiagram {
   transactionName = "exchange",
   scriptInputs = Map.fromList [
-    ("exchange", InputFromScript "CentralExchange" "()"),
-    ("oracle1", InputFromScript "Oracle 1" "Trade"),
-    ("oracle2", InputFromScript "Oracle 2" "Trade")],
+    ("exchange", InputFromScript "CentralExchange" "()" []),
+    ("oracle1", InputFromScript "Oracle 1" "Trade" ["Token1"]),
+    ("oracle2", InputFromScript "Oracle 2" "Trade" ["Token2"])],
   walletInputs = Map.fromList [
-    ("wallet1", Wallet []),
-    ("wallet2", Wallet [])],
+    ("wallet1", Wallet ["Token1"]),
+    ("wallet2", Wallet ["Token2"])],
   scriptOutputs = Map.fromList [
-    ("exchange", OutputToScript "CentralExchange"),
-    ("oracle1", OutputToScript "Oracle 1"),
-    ("oracle2", OutputToScript "Oracle 2")],
+    ("exchange", OutputToScript "CentralExchange" ["Token1", "Token2"]),
+    ("oracle1", OutputToScript "Oracle 1" ["Token1"]),
+    ("oracle2", OutputToScript "Oracle 2" ["Token2"])],
   walletOutputs = Map.fromList [
-    ("wallet1", Wallet []),
-    ("wallet2", Wallet [])]}
+    ("wallet1", Wallet ["Token2"]),
+    ("wallet2", Wallet ["Token1"])]}
 
 data TransactionTypeDiagram = TransactionTypeDiagram {
   transactionName :: Text,
@@ -52,41 +54,47 @@ data TransactionTypeDiagram = TransactionTypeDiagram {
 
 data InputFromScript = InputFromScript {
   fromScript :: Text,
-  redeemer :: Text}
---  inputCurrencies :: [Currency]}
+  redeemer :: Text,
+  inputCurrencies :: [Currency]}
 
 data OutputToScript = OutputToScript {
-  toScript :: Text}
+  toScript :: Text,
 --  datum :: Text,
---  outputCurrencies :: [Currency]}
+  outputCurrencies :: [Currency]}
 
 data Wallet = Wallet {
   currencies :: [Currency]}
 
-newtype Currency = Currency {currencyName :: Text}
+newtype Currency = Currency {currencyName :: Text} deriving (Eq, IsString, Show)
+
+present :: [Currency] -> Text
+present = Text.intercalate ", " . map currencyName
 
 transactionTypeGraph :: TransactionTypeDiagram -> Gr Text Text
 transactionTypeGraph TransactionTypeDiagram{transactionName, scriptInputs, scriptOutputs, walletInputs, walletOutputs}
   = mkGraph nodes edges where
-  nodes = (transactionNode, transactionName) : (isNodes <> osNodes <> iwNodes <> owNodes <> scriptNodes)
-  edges = [(n, transactionNode, redeemer $ scriptInputs Map.! name) | (n, name) <- isNodes]
-       <> [(n, transactionNode, name) | (n, name) <- iwNodes]
-       <> [(transactionNode, n, name) | (n, name) <- osNodes]
-       <> [(transactionNode, n, name) | (n, name) <- owNodes]
+  nodes =
+    (transactionNode, transactionName)
+    : (map dropMiddle (isNodes <> osNodes <> iwNodes <> owNodes) <> scriptNodes)
+  edges = [(n, transactionNode, redeemer $ scriptInputs Map.! name) | (n, name, _) <- isNodes]
+       <> [(n, transactionNode, name) | (n, name, _) <- iwNodes]
+       <> [(transactionNode, n, name) | (n, name, _) <- osNodes]
+       <> [(transactionNode, n, name) | (n, name, _) <- owNodes]
        <> [ (scriptNode, n, "")
-          | (n, name) <- isNodes,
+          | (n, name, _) <- isNodes,
             let scriptName = fromScript $ scriptInputs Map.! name;
                 [(scriptNode, _)] = filter ((scriptName ==) . snd) scriptNodes]
        <> [ (n, scriptNode, "")
-          | (n, name) <- osNodes,
+          | (n, name, _) <- osNodes,
             let scriptName = toScript $ scriptOutputs Map.! name;
                 [(scriptNode, _)] = filter ((scriptName ==) . snd) scriptNodes]
   transactionNode = 0
-  isNodes = [(5*n, name) | (n, (name, InputFromScript {})) <- zip [1..] $ Map.toList scriptInputs]
-  osNodes = [(5*n+1, name) | (n, (name, OutputToScript {})) <- zip [1..] $ Map.toList scriptOutputs]
-  iwNodes = [(5*n+2, name) | (n, (name, Wallet {currencies})) <- zip [1..] $ Map.toList walletInputs]
-  owNodes = [(5*n+3, name) | (n, (name, Wallet {currencies})) <- zip [1..] $ Map.toList walletOutputs]
+  isNodes = [(5*n, name, present inputCurrencies) | (n, (name, InputFromScript {inputCurrencies})) <- zip [1..] $ Map.toList scriptInputs]
+  osNodes = [(5*n+1, name, present outputCurrencies) | (n, (name, OutputToScript {outputCurrencies})) <- zip [1..] $ Map.toList scriptOutputs]
+  iwNodes = [(5*n+2, name, present currencies) | (n, (name, Wallet {currencies})) <- zip [1..] $ Map.toList walletInputs]
+  owNodes = [(5*n+3, name, present currencies) | (n, (name, Wallet {currencies})) <- zip [1..] $ Map.toList walletOutputs]
   scriptNodes =
     [ (5*n+4, name)
     | (n, name) <- zip [1..] $ nub $ map snd $ Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs)) ]
+  dropMiddle (a, _, b) = (a, b)
 ~~~
