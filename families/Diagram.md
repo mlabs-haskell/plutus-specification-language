@@ -22,7 +22,7 @@ import Data.GraphViz (
   GraphvizParams(clusterBy, clusterID, fmtCluster, fmtEdge, fmtNode, isDotCluster),
   NodeCluster (C, N), GraphID (Num), Number (Int),
   defaultParams, graphToDot, preview, runGraphviz, runGraphvizCanvas', toLabel)
-import Data.GraphViz.Attributes.Complete (Attribute (Weight))
+import Data.GraphViz.Attributes.Complete (Attribute (Shape, Weight), Shape (DoubleOctagon))
 
 main = do
   let g = exchangeDot
@@ -43,7 +43,7 @@ exchangeDot = graphToDot params g'
           clusterBy = clustering,
           fmtCluster = \ n -> case match n g of
             (Just (_, _, scriptName, _), _) -> [GraphAttrs [toLabel scriptName]],
-          fmtNode = \ (_,l) -> [toLabel l],
+          fmtNode = \ (n, l) -> toLabel l : if n == 0 then [Shape DoubleOctagon] else [],
           fmtEdge = \ (src, dest, l) -> toLabel l : if dest == 0 && src `mod` 6 == 2 then [Weight $ Int 0] else []}
         clustering :: (Int, Text) -> NodeCluster Int (Int, Text) 
         clustering (n, name)
