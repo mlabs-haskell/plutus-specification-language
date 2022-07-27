@@ -117,7 +117,7 @@ transactionTypeGraph TransactionTypeDiagram{transactionName, scriptInputs, scrip
   nodes =
     (transactionNode, transactionName)
     : (map dropMiddle (isNodes <> osNodes <> iwNodes <> owNodes) <> scriptNodes <> walletNodes)
-  edges = [(n, transactionNode, redeemer $ scriptInputs Map.! name) | (n, name, _) <- isNodes]
+  edges = [(n, transactionNode, redeemer (scriptInputs Map.! name) <> "@" <> name) | (n, name, _) <- isNodes]
        <> [(n, transactionNode, name) | (n, name, _) <- iwNodes]
        <> [(transactionNode, n, name) | (n, name, _) <- osNodes]
        <> [(transactionNode, n, name) | (n, name, _) <- owNodes]
