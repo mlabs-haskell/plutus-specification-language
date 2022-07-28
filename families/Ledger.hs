@@ -5,6 +5,9 @@ import Data.ByteString (ByteString)
 import Data.String (IsString)
 
 newtype PubKey = PubKey {getPubKey :: LedgerBytes} deriving (Eq, IsString, Show)
+newtype PubKeyHash = PubKeyHash {getPubKeyHash :: LedgerBytes} deriving (Eq, IsString, Show)
+newtype PaymentPubKeyHash = PaymentPubKeyHash {getPaymentPubKeyHash :: LedgerBytes} deriving (Eq, IsString, Show)
+newtype ValidatorHash = ValidatorHash {getValidatorHash :: LedgerBytes} deriving (Eq, IsString, Show)
 newtype LedgerBytes = LedgerBytes {getLedgerBytes :: BuiltinByteString} deriving (Eq, IsString, Show)
 newtype BuiltinByteString = BuiltinByteString ByteString deriving (Eq, IsString, Show)
 
@@ -24,5 +27,6 @@ always = undefined
 newtype Value = Value {getValue :: Map CurrencySymbol (Map TokenName Integer)}
 newtype Map k v = Map { unMap :: [(k, v)] }
 
+data AssetClass
 data CurrencySymbol
 data TokenName
