@@ -32,7 +32,7 @@ executable diagram
 test-suite doc
   type:               exitcode-stdio-1.0
   main-is:            TransactionFamily.lhs
-  other-modules:      Families, Families.Diagram, Ledger, Typed, HKD, NFT, Diagram
+  other-modules:      Families, Families.Diagram, Ledger, Typed, HKD, NFT, Diagram, SP
   ghc-options:        -pgmL markdown-unlit
   build-depends:      base, bytestring, containers, text, fgl, graphviz >= 2999.10
   build-tool-depends: markdown-unlit:markdown-unlit
