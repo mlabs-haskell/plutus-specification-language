@@ -27,6 +27,7 @@ import Plutarch.EType
 import Plutarch.PSL
 import Prettyprinter
 import Prettyprinter.Render.Text (renderStrict)
+import TicTacToe (GameProtocol)
 
 newtype Lvl = Lvl {unLvl :: Int}
   deriving (Num, Show) via Int
@@ -46,6 +47,7 @@ data PprTerm
   | PprMatch PprTerm PprBind [(Text, PprTerm)] -- match M as x for { ConA -> ...; ConB -> ... }
   | PprProj PprTerm Text -- x.field
   | PprVar PprBind -- x
+  | PprTodo Text
   deriving stock (Show)
 
 data PprBind = PprBind Lvl Text -- unique bind\
@@ -199,7 +201,9 @@ instance (Monad m, IsEType (Ppr m) a, IsEType (Ppr m) b) => EConstructable' (Ppr
 -- instance (forall a. EConstructable Ppr a => EConstructable Ppr (f a))
 --   => EConstructable' (Ppr m) (MkETypeRepr (EFix f)) where
 
-instance EConstructable' (Ppr m) (MkETypeRepr EData)
+instance Applicative m => EConstructable' (Ppr m) (MkETypeRepr EData) where
+  econImpl _ = Ppr $ pure $ PprTodo "BuiltinData"
+  ematchImpl _ _ = pterm $ PprTodo "matching on BuiltinData"
 
 -- TODO
 
@@ -288,6 +292,9 @@ instance Monad m => EEmbeds m (Ppr m) where
     tm <- lift m
     runTerm tm
 
+instance Applicative m => EPartial (Ppr m) where
+  eerror = pterm $ PprCall "fail" []
+
 compile' :: forall a m. (Applicative m, IsEType (Ppr m) a) => Term (Ppr m) a -> m (PprTerm, PprType)
 compile' v = (,) <$> runReaderT (runTerm v) (-1, "") <*> pure (typeInfo (Proxy @m) (Proxy @a))
 
@@ -298,13 +305,18 @@ compileSimple :: forall a m. (Applicative m, IsEType (Ppr m) a) => Term (Ppr m) 
 compileSimple v = ppr . fst <$> compile' v
 
 ppr :: PprTerm -> Text
-ppr = renderStrict . layoutPretty defaultLayoutOptions . (`pprTerm` (-10))
+ppr = renderStrict . layoutPretty defaultLayoutOptions {layoutPageWidth = AvailablePerLine 120 1.0} . (`pprTerm` (-10))
 
-testTerm :: EPSL edsl => Term edsl (EInteger #-> EUnit #-> EInteger)
-testTerm = econ (ELam \x -> econ $ ELam \y -> x)
+type EChurch e = (e #-> e) #-> e #-> e
+
+testTerm :: EPSL edsl => Term edsl (EChurch EInteger #-> EChurch EInteger #-> EChurch EInteger)
+testTerm = elam \x -> elam \y -> elam \s -> elam \z -> x # s # (y # s # z)
 
 compiled :: Text
 compiled = runIdentity $ compileSimple testTerm
+
+-- >>> compiled
+-- "\\0: (Integer -> Integer) -> Integer -> Integer -> \\1: (Integer -> Integer) -> Integer -> Integer ->\n\\2: Integer -> Integer -> \\3: Integer -> 0 2 (1 2 3)"
 
 type Prec = Int
 
@@ -319,26 +331,34 @@ pprBind (PprBind lvl _) = pretty $ show lvl
 
 pprType :: PprType -> Prec -> Doc a
 pprType = \case
-  PprName head args -> withPrec 10 $ sep $ pretty head : fmap (`pprType` 11) args
+  PprName head args ->
+    let call = sep $ pretty head : fmap (`pprType` 11) args
+     in if null args then const call else withPrec 10 call
   PprProduct lhs rhs -> withPrec 7 $ pprType lhs 8 <+> "*" <+> pprType rhs 7
   PprSum lhs rhs -> withPrec 6 $ pprType lhs 7 <+> "+" <+> pprType rhs 6
   PprFunc lhs rhs -> withPrec 0 $ pprType lhs 1 <+> "->" <+> pprType rhs 0
 
 pprTerm :: PprTerm -> Prec -> Doc a
 pprTerm = \case
-  PprCall head args -> withPrec 10 $ sep $ pretty head : fmap (`pprTerm` 11) args
-  PprMonCat lhs rhs -> withPrec 5 $ pprTerm lhs 5 <+> "<>" <+> pprTerm rhs 6
-  PprLam param ty body -> withPrec (-1) $ "\\" <> pprBind param <> ":" <+> pprType ty 0 <+> "->" <+> pprTerm body (-1)
-  PprApp f x -> withPrec 10 $ pprTerm f 10 <+> pprTerm x 11
+  PprCall head args ->
+    let call = nest 2 $ sep $ pretty head : fmap (`pprTerm` 11) args
+     in if null args then const call else withPrec 10 call
+  PprMonCat lhs rhs -> withPrec 5 $ pprTerm lhs 6 <> softline <> "<>" <+> pprTerm rhs 5
+  PprLam param ty body -> withPrec (-1) $ "\\" <> pprBind param <> ":" <+> pprType ty 0 <+> "->" <> softline <> pprTerm body (-1)
+  PprApp f x -> withPrec 10 $ nest 2 $ pprTerm f 10 <+> pprTerm x 11
   PprMatch scrut var branches ->
-    withPrec 0 $
-      "match" <+> pprTerm scrut 0 <+> "as" <+> pprBind var <+> "with"
-        <+> encloseSep lbrace rbrace semi (map (\(con, body) -> pretty con <+> "->" <+> pprTerm body 1) branches)
+    withPrec 9 $
+      nest 2 $
+        "match" <+> pprTerm scrut 0 <+> "as" <+> pprBind var <> line
+          <> ( encloseSep -- match exp as ident
+                 "{ "
+                 (flatAlt (line <> "}") " }")
+                 "; " -- { case A -> ...; case B -> ...; case C -> ... }
+                 (map (\(con, body) -> "case" <+> pretty con <+> "->" <> softline <> pprTerm body 1) branches)
+             )
   PprProj obj field -> withPrec 11 $ pprTerm obj 11 <> "." <> pretty field
   PprVar var -> const $ pprBind var
-
--- >>> compiled
--- "\\0: Integer -> \\1: () -> 0"
+  PprTodo sth -> const $ "<" <> pretty sth <> ">"
 
 instance Monad m => EPSL (Ppr m) where
   requireInput (MkTerm x) = term do
