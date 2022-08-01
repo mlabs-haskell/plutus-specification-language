@@ -18,7 +18,7 @@ import Data.GraphViz (
   runGraphviz, runGraphvizCanvas')
 
 main = do
-  let g = transactionGraphToDot (transactionTypeGraph exchangeTypeDiagram)
+  let g = transactionGraphToDot (transactionTypeGraph 0 exchangeTypeDiagram)
   forkIO (runGraphvizCanvas' g Xlib)
   runGraphviz g Canon "exchange.dot"
 

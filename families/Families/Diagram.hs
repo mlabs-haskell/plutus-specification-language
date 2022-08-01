@@ -44,10 +44,16 @@ data Wallet = Wallet {
 
 newtype Currency = Currency {currencyName :: Text} deriving (Eq, IsString, Show)
 
+nodeType :: Int -> Int
+nodeType = (`mod` 7)
+
+isTransaction :: Int -> Bool
+isTransaction = (== 0) . nodeType
+
 transactionGraphToDot :: Gr Text Text -> DotGraph Int
 transactionGraphToDot g = graphToDot params g'
   where g' :: Gr Text Text
-        g' = foldr dropNode g (filter ((> 3) . (`mod` 6)) $ map fst $ labNodes g) -- drop script and wallet nodes
+        g' = foldr dropNode g (filter ((> 4) . nodeType) $ map fst $ labNodes g) -- drop script and wallet nodes
         dropNode :: Int -> Gr Text Text -> Gr Text Text
         dropNode n gr = snd (match n gr)
         params :: GraphvizParams Int Text Text Int Text
@@ -56,33 +62,39 @@ transactionGraphToDot g = graphToDot params g'
           clusterBy = clustering,
           fmtCluster = \ n -> case match n g of
             (Just (_, _, scriptName, _), _) -> [GraphAttrs [toLabel scriptName]],
-          fmtNode = \ (n, l) -> toLabel l : if n == 0 then [Shape DoubleOctagon] else [],
-           -- give wallet inputs weight 0 to move wallet clusters below transaction
-          fmtEdge = \ (src, dest, l) -> toLabel l : if dest == 0 && src `mod` 6 == 2 then [Weight $ Int 0] else []}
-        clustering :: (Int, Text) -> NodeCluster Int (Int, Text) 
+          fmtNode = \ (n, l) -> toLabel l : if isTransaction n then [Shape DoubleOctagon] else [],
+          -- give wallet inputs weight 0 to move wallet clusters below transaction
+          fmtEdge = \ (src, dest, l) ->
+            toLabel l : if isTransaction dest && nodeType src == 3 then [Weight $ Int 0] else []}
+        clustering :: (Int, Text) -> NodeCluster Int (Int, Text)
         clustering (n, name)
           | (Just (ins, node, _, outs), _) <- match n g =
-            case n `mod` 6 of
+            case nodeType n of
               -- inputs from scripts
-              0 | [(_, script)] <- ins, (Just (_, _, scriptName, _), _) <- match script g ->
+              1 | [(_, script)] <- ins, (Just (_, _, scriptName, _), _) <- match script g ->
                   C script (N (n, name))
               -- outputs from scripts
-              1 | [(_, script)] <- filter ((/= 0) . snd) ins, (Just (_, _, scriptName, _), _) <- match script g ->
+              2 | [(_, script)] <- filter (not . isTransaction . snd) ins,
+                  (Just (_, _, scriptName, _), _) <- match script g ->
                   C script (N (n, name))
               -- inputs from wallets
-              2 | [(_, wallet)] <- ins, (Just (_, _, walletName, _), _) <- match wallet g ->
+              3 | [(_, wallet)] <- ins, (Just (_, _, walletName, _), _) <- match wallet g ->
                   C wallet (N (n, name))
               -- outputs from wallets
-              3 | [(_, wallet)] <- filter ((/= 0) . snd) ins, (Just (_, _, walletName, _), _) <- match wallet g ->
+              4 | [(_, wallet)] <- filter (not . isTransaction . snd) ins,
+                  (Just (_, _, walletName, _), _) <- match wallet g ->
                   C wallet (N (n, name))
               -- scripts
-              4 -> C n (N (n, name))
-              -- wallets
               5 -> C n (N (n, name))
+              -- wallets
+              6 -> C n (N (n, name))
+              -- transactions
               _ -> N (n, name)
 
-transactionTypeGraph :: TransactionTypeDiagram -> Gr Text Text
-transactionTypeGraph TransactionTypeDiagram{transactionName, scriptInputs, scriptOutputs, walletInputs, walletOutputs}
+transactionTypeGraph :: Int -> TransactionTypeDiagram -> Gr Text Text
+transactionTypeGraph
+  startIndex
+  TransactionTypeDiagram{transactionName, scriptInputs, scriptOutputs, walletInputs, walletOutputs}
   = mkGraph nodes edges where
   nodes =
     (transactionNode, transactionName)
@@ -103,17 +115,25 @@ transactionTypeGraph TransactionTypeDiagram{transactionName, scriptInputs, scrip
           | (n, name, _) <- iwNodes <> owNodes,
             let wName = walletName $ walletInputs Map.! name;
                 [(walletNode, _)] = filter ((wName ==) . snd) walletNodes]
-  transactionNode = 0
-  isNodes = [(6*n, name, present inputCurrencies) | (n, (name, InputFromScript {inputCurrencies})) <- zip [1..] $ Map.toList scriptInputs]
-  osNodes = [(6*n+1, name, present outputCurrencies) | (n, (name, OutputToScript {outputCurrencies})) <- zip [1..] $ Map.toList scriptOutputs]
-  iwNodes = [(6*n+2, name, present currencies) | (n, (name, Wallet {currencies})) <- zip [1..] $ Map.toList walletInputs]
-  owNodes = [(6*n+3, name, present currencies) | (n, (name, Wallet {currencies})) <- zip [1..] $ Map.toList walletOutputs]
+  transactionNode = 7*startIndex
+  isNodes =
+    [ (7*n+1, name, present inputCurrencies)
+    | (n, (name, InputFromScript {inputCurrencies})) <- zip [startIndex..] $ Map.toList scriptInputs ]
+  osNodes =
+    [ (7*n+2, name, present outputCurrencies)
+    | (n, (name, OutputToScript {outputCurrencies})) <- zip [startIndex..] $ Map.toList scriptOutputs]
+  iwNodes =
+    [ (7*n+3, name, present currencies)
+    | (n, (name, Wallet {currencies})) <- zip [startIndex..] $ Map.toList walletInputs]
+  owNodes =
+    [ (7*n+4, name, present currencies)
+    | (n, (name, Wallet {currencies})) <- zip [startIndex..] $ Map.toList walletOutputs]
   scriptNodes =
-    [ (6*n+4, name)
-    | (n, name) <- zip [1..] $ nub $ map snd $ Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs)) ]
+    [ (7*n+5, name)
+    | (n, name) <- zip [startIndex..] $ nub $ map snd $ Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs)) ]
   walletNodes = 
-    [ (6*n+5, name)
-    | (n, name) <- zip [1..] $ nub $ map snd $ Map.toList (walletName <$> walletInputs <> walletOutputs) ]
+    [ (7*n+6, name)
+    | (n, name) <- zip [startIndex..] $ nub $ map snd $ Map.toList (walletName <$> walletInputs <> walletOutputs) ]
   dropMiddle (a, _, b) = (a, b)
   present :: [Currency] -> Text
   present = Text.intercalate ", " . map currencyName
