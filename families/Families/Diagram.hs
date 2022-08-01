@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, NamedFieldPuns, OverloadedStrings #-}
+{-# LANGUAGE DuplicateRecordFields, GeneralizedNewtypeDeriving, NamedFieldPuns, OverloadedStrings #-}
 
 module Families.Diagram where
 
@@ -31,12 +31,13 @@ data TransactionTypeDiagram = TransactionTypeDiagram {
 data InputFromScript = InputFromScript {
   fromScript :: Text,
   redeemer :: Text,
-  inputCurrencies :: [Currency]}
+  datum :: Text,
+  currencies :: [Currency]}
 
 data OutputToScript = OutputToScript {
   toScript :: Text,
---  datum :: Text,
-  outputCurrencies :: [Currency]}
+  datum :: Text,
+  currencies :: [Currency]}
 
 data Wallet = Wallet {
   walletName :: Text,
@@ -98,17 +99,17 @@ transactionTypeGraph
   = mkGraph nodes edges where
   nodes =
     (transactionNode, transactionName)
-    : (map dropMiddle (isNodes <> osNodes <> iwNodes <> owNodes) <> scriptNodes <> walletNodes)
-  edges = [(n, transactionNode, redeemer (scriptInputs Map.! name) <> "@" <> name) | (n, name, _) <- isNodes]
+    : (map dropMiddles (isNodes <> osNodes) <> map dropMiddle (iwNodes <> owNodes) <> scriptNodes <> walletNodes)
+  edges = [(n, transactionNode, redeemer (scriptInputs Map.! name) <> "@" <> name) | (n, name, _, _) <- isNodes]
        <> [(n, transactionNode, name) | (n, name, _) <- iwNodes]
-       <> [(transactionNode, n, name) | (n, name, _) <- osNodes]
+       <> [(transactionNode, n, name) | (n, name, _, _) <- osNodes]
        <> [(transactionNode, n, name) | (n, name, _) <- owNodes]
        <> [ (scriptNode, n, "")
-          | (n, name, _) <- isNodes,
+          | (n, name, _, _) <- isNodes,
             let scriptName = fromScript $ scriptInputs Map.! name;
                 [(scriptNode, _)] = filter ((scriptName ==) . snd) scriptNodes]
        <> [ (scriptNode, n, "")
-          | (n, name, _) <- osNodes,
+          | (n, name, _, _) <- osNodes,
             let scriptName = toScript $ scriptOutputs Map.! name;
                 [(scriptNode, _)] = filter ((scriptName ==) . snd) scriptNodes]
        <> [ (walletNode, n, "")
@@ -117,11 +118,11 @@ transactionTypeGraph
                 [(walletNode, _)] = filter ((wName ==) . snd) walletNodes]
   transactionNode = 7*startIndex
   isNodes =
-    [ (7*n+1, name, present inputCurrencies)
-    | (n, (name, InputFromScript {inputCurrencies})) <- zip [startIndex..] $ Map.toList scriptInputs ]
+    [ (7*n+1, name, datum, present currencies)
+    | (n, (name, InputFromScript {currencies, datum})) <- zip [startIndex..] $ Map.toList scriptInputs ]
   osNodes =
-    [ (7*n+2, name, present outputCurrencies)
-    | (n, (name, OutputToScript {outputCurrencies})) <- zip [startIndex..] $ Map.toList scriptOutputs]
+    [ (7*n+2, name, datum, present currencies)
+    | (n, (name, OutputToScript {currencies, datum})) <- zip [startIndex..] $ Map.toList scriptOutputs]
   iwNodes =
     [ (7*n+3, name, present currencies)
     | (n, (name, Wallet {currencies})) <- zip [startIndex..] $ Map.toList walletInputs]
@@ -130,10 +131,11 @@ transactionTypeGraph
     | (n, (name, Wallet {currencies})) <- zip [startIndex..] $ Map.toList walletOutputs]
   scriptNodes =
     [ (7*n+5, name)
-    | (n, name) <- zip [startIndex..] $ nub $ map snd $ Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs)) ]
+    | (n, name) <- zip [0..] $ nub $ map snd $ Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs)) ]
   walletNodes = 
     [ (7*n+6, name)
-    | (n, name) <- zip [startIndex..] $ nub $ map snd $ Map.toList (walletName <$> walletInputs <> walletOutputs) ]
+    | (n, name) <- zip [0..] $ nub $ map snd $ Map.toList (walletName <$> walletInputs <> walletOutputs) ]
   dropMiddle (a, _, b) = (a, b)
+  dropMiddles (a, _, _, b) = (a, b)
   present :: [Currency] -> Text
   present = Text.intercalate ", " . map currencyName
