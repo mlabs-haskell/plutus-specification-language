@@ -53,39 +53,40 @@ isTransaction :: Int -> Bool
 isTransaction = (== 0) . nodeType
 
 transactionGraphToDot :: Gr NodeId Text -> DotGraph Int
-transactionGraphToDot g = graphToDot params g'
-  where g' :: Gr Text Text
-        g' = first nodeLabel $ foldr dropNode g (filter ((> 4) . nodeType) $ map fst $ labNodes g) -- drop script and wallet nodes
-        dropNode :: Int -> Gr a b -> Gr a b
-        dropNode n gr = snd (match n gr)
-        params :: GraphvizParams Int Text Text Int Text
-        params = defaultParams{
-          clusterID = Num . Int,
-          clusterBy = clustering,
-          fmtCluster = \ n -> case match n g of
-            (Just (_, _, node, _), _) -> [GraphAttrs [toLabel $ nodeLabel node]],
-          fmtNode = \ (n, l) -> toLabel l : if isTransaction n then [Shape DoubleOctagon] else [],
-          -- give wallet inputs weight 0 to move wallet clusters below transaction
-          fmtEdge = \ (src, dest, l) ->
-            toLabel l : if isTransaction dest && nodeType src == 3 then [Weight $ Int 0] else []}
-        clustering :: (Int, Text) -> NodeCluster Int (Int, Text)
-        clustering (n, name)
-          | (Just (ins, node, _, outs), _) <- match n g, let noCluster = N (n, name) =
-            case nodeType n of
-              -- inputs from scripts
-              1 | [(_, script)] <- ins -> C script noCluster
-              -- outputs from scripts
-              2 | [(_, script)] <- filter (not . isTransaction . snd) ins -> C script noCluster
-              -- inputs from wallets
-              3 | [(_, wallet)] <- ins -> C wallet noCluster
-              -- outputs from wallets
-              4 | [(_, wallet)] <- filter (not . isTransaction . snd) ins -> C wallet noCluster
-              -- scripts
-              5 -> C n noCluster
-              -- wallets
-              6 -> C n noCluster
-              -- transactions
-              _ -> noCluster
+transactionGraphToDot g = graphToDot params g' where
+  g' :: Gr Text Text
+  g' = first nodeLabel $ foldr dropNode g (filter ((> 4) . nodeType) $ map fst $ labNodes g)
+  -- drop script and wallet nodes
+  dropNode :: Int -> Gr a b -> Gr a b
+  dropNode n gr = snd (match n gr)
+  params :: GraphvizParams Int Text Text Int Text
+  params = defaultParams{
+    clusterID = Num . Int,
+    clusterBy = clustering,
+    fmtCluster = \ n -> case match n g of
+      (Just (_, _, node, _), _) -> [GraphAttrs [toLabel $ nodeLabel node]],
+    fmtNode = \ (n, l) -> toLabel l : if isTransaction n then [Shape DoubleOctagon] else [],
+    -- give wallet inputs weight 0 to move wallet clusters below transaction
+    fmtEdge = \ (src, dest, l) ->
+      toLabel l : if isTransaction dest && nodeType src == 3 then [Weight $ Int 0] else []}
+  clustering :: (Int, Text) -> NodeCluster Int (Int, Text)
+  clustering (n, name)
+    | (Just (ins, node, _, outs), _) <- match n g, let noCluster = N (n, name) =
+      case nodeType n of
+        -- inputs from scripts
+        1 | [(_, script)] <- ins -> C script noCluster
+        -- outputs from scripts
+        2 | [(_, script)] <- filter (not . isTransaction . snd) ins -> C script noCluster
+        -- inputs from wallets
+        3 | [(_, wallet)] <- ins -> C wallet noCluster
+        -- outputs from wallets
+        4 | [(_, wallet)] <- filter (not . isTransaction . snd) ins -> C wallet noCluster
+        -- scripts
+        5 -> C n noCluster
+        -- wallets
+        6 -> C n noCluster
+        -- transactions
+        _ -> noCluster
 
 data OverlayMode = Parallel | Serial
 
