@@ -119,6 +119,7 @@ type DrainInputs :: (forall (s :: ExchangeDApp) -> Redeemer s -> [Token] -> Type
 data DrainInputs s w = DrainInputs {
   exchange :: s 'CentralExchange '() ['Token 1, 'Token 2, 'Token 3]}
 data DrainOutputs s w = DrainOutputs {
+  authority :: w ['Token 1, 'Token 2, 'Token 3],
   exchange :: s 'CentralExchange '[ 'ScriptAda ]}
 instance Transaction 'DrainCollectedFees where
   type Inputs 'DrainCollectedFees = DrainInputs

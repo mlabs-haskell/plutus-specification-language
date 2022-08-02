@@ -1,19 +1,23 @@
-{-# LANGUAGE DuplicateRecordFields, GeneralizedNewtypeDeriving, NamedFieldPuns, OverloadedStrings #-}
+{-# LANGUAGE BangPatterns, DuplicateRecordFields, GeneralizedNewtypeDeriving, NamedFieldPuns, OverloadedStrings #-}
 
 module Families.Diagram where
 
 import Families (Transaction)
 import HKD
-import Data.Bifunctor (first)
+import Control.Arrow ((&&&))
+import Data.Bifunctor (first, second)
 import Data.Kind (Type)
 import Data.List (nub)
+import Data.IntMap (IntMap)
 import Data.Map (Map)
+import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
+import Data.Maybe (mapMaybe)
 import Data.Foldable (toList)
 import Data.String (IsString)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Graph.Inductive (Gr, labNodes, match, mkGraph)
+import Data.Graph.Inductive (Context, Gr, empty, gmap, labEdges, labNodes, match, mkGraph)
 import Data.GraphViz (
   DotGraph, GraphvizCanvas (Xlib), GraphvizOutput (Canon, DotOutput),
   GlobalAttributes (GraphAttrs),
@@ -44,7 +48,7 @@ data Wallet = Wallet {
   walletName :: Text,
   currencies :: [Currency]}
 
-newtype Currency = Currency {currencyName :: Text} deriving (Eq, IsString, Show)
+newtype Currency = Currency {currencyName :: Text} deriving (Eq, Ord, IsString, Show)
 
 nodeType :: Int -> Int
 nodeType = (`mod` 7)
@@ -88,14 +92,14 @@ transactionGraphToDot g = graphToDot params g' where
         -- transactions
         _ -> noCluster
 
-data OverlayMode = Parallel | Serial
+data OverlayMode = Distinct | Parallel | Serial
 
 data NodeId = ScriptNamed Text
             | WalletNamed Text
             | TransactionNamed Text
             | ScriptUTxO {script :: Text, datum :: Text, currencies :: [Currency]}
             | WalletUTxO Text [Currency]
-            deriving (Eq, Show)
+            deriving (Eq, Ord, Show)
 
 nodeLabel :: NodeId -> Text
 nodeLabel (ScriptNamed name) = name
@@ -104,8 +108,32 @@ nodeLabel (TransactionNamed name) = name
 nodeLabel ScriptUTxO {currencies} = Text.intercalate ", " (currencyName <$> currencies)
 nodeLabel (WalletUTxO _ currencies) = Text.intercalate ", " (currencyName <$> currencies)
 
-transactionTypeFamilyGraph :: OverlayMode -> [TransactionTypeDiagram] -> Gr Text Text
-transactionTypeFamilyGraph = undefined
+transactionTypeFamilyGraph :: OverlayMode -> [TransactionTypeDiagram] -> Gr NodeId Text
+transactionTypeFamilyGraph mode = mergeGraphs . foldr addTx (0, []) where
+  mergeGraphs :: (Int, [Gr NodeId Text]) -> Gr NodeId Text
+  mergeGraphs (total, gs) = gconcat (replaceFixedNodes <$> gs)
+    where nodeIdMap :: Map NodeId Int
+          nodeIdMap =
+            Map.fromList (zip (foldMap (nodesOfType 5) gs) $ (7*total+) <$> [5, 12 ..])
+            <> Map.fromList (zip (foldMap (nodesOfType 6) gs) $ (7*total+) <$> [6, 13 ..])
+          nodeMap :: IntMap Int
+          nodeMap = foldMap (IntMap.fromList . mapMaybe targetNode . labNodes) gs
+          targetNode :: (Int, NodeId) -> Maybe (Int, Int)
+          targetNode (n, node) = (,) n <$> Map.lookup node nodeIdMap
+          nodesOfType :: Int -> Gr NodeId Text -> [NodeId]
+          nodesOfType t g = snd <$> filter ((t ==) . nodeType . fst) (labNodes g)
+          replaceFixedNodes :: Gr NodeId Text -> Gr NodeId Text
+          replaceFixedNodes g = mkGraph (first switchNode <$> labNodes g) (switchEnds <$> labEdges g)
+          switchEnds (start, end, label) = (switchNode start, switchNode end, label)
+          switchNode n = IntMap.findWithDefault n n nodeMap
+  addTx :: TransactionTypeDiagram -> (Int, [Gr NodeId Text]) -> (Int, [Gr NodeId Text])
+  addTx d (!total, gs) = (total + maxNodeCount d, transactionTypeGraph total d : gs)
+  maxNodeCount :: TransactionTypeDiagram -> Int
+  maxNodeCount TransactionTypeDiagram{scriptInputs, scriptOutputs, walletInputs, walletOutputs} =
+    1 `max` (length scriptInputs + length scriptOutputs) `max` (length walletInputs + length walletOutputs)
+
+gconcat :: [Gr a b] -> Gr a b
+gconcat = uncurry mkGraph . mconcat . map (labNodes &&& labEdges)
 
 transactionTypeGraph :: Int -> TransactionTypeDiagram -> Gr NodeId Text
 transactionTypeGraph
@@ -151,7 +179,7 @@ transactionTypeGraph
     | (n, (name, Wallet {walletName, currencies})) <- zip [startIndex..] $ Map.toList walletOutputs]
   scriptNodes =
     [ (7*n+5, ScriptNamed name)
-    | (n, name) <- zip [0..] $ nub $ map snd $ Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs)) ]
+    | (n, name) <- zip [startIndex..] $ nub $ map snd $ Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs)) ]
   walletNodes =
     [ (7*n+6, WalletNamed name)
-    | (n, name) <- zip [0..] $ nub $ map snd $ Map.toList (walletName <$> walletInputs <> walletOutputs) ]
+    | (n, name) <- zip [startIndex..] $ nub $ map snd $ Map.toList (walletName <$> walletInputs <> walletOutputs) ]
