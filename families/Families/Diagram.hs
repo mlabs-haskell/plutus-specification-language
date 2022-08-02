@@ -73,19 +73,13 @@ transactionGraphToDot g = graphToDot params g'
           | (Just (ins, node, _, outs), _) <- match n g =
             case nodeType n of
               -- inputs from scripts
-              1 | [(_, script)] <- ins, (Just (_, _, scriptName, _), _) <- match script g ->
-                  C script (N (n, name))
+              1 | [(_, script)] <- ins -> C script (N (n, name))
               -- outputs from scripts
-              2 | [(_, script)] <- filter (not . isTransaction . snd) ins,
-                  (Just (_, _, scriptName, _), _) <- match script g ->
-                  C script (N (n, name))
+              2 | [(_, script)] <- filter (not . isTransaction . snd) ins -> C script (N (n, name))
               -- inputs from wallets
-              3 | [(_, wallet)] <- ins, (Just (_, _, walletName, _), _) <- match wallet g ->
-                  C wallet (N (n, name))
+              3 | [(_, wallet)] <- ins -> C wallet (N (n, name))
               -- outputs from wallets
-              4 | [(_, wallet)] <- filter (not . isTransaction . snd) ins,
-                  (Just (_, _, walletName, _), _) <- match wallet g ->
-                  C wallet (N (n, name))
+              4 | [(_, wallet)] <- filter (not . isTransaction . snd) ins -> C wallet (N (n, name))
               -- scripts
               5 -> C n (N (n, name))
               -- wallets
