@@ -12,18 +12,33 @@ import Families.Diagram (
   InputFromScript (InputFromScript, currencies, datum, redeemer, fromScript),
   OutputToScript (OutputToScript, currencies, datum, toScript),
   Wallet (Wallet),
-  transactionGraphToDot, transactionTypeGraph)
+  OverlayMode (Distinct),
+  transactionGraphToDot, transactionTypeGraph, transactionTypeFamilyGraph)
 import Data.GraphViz (
   GraphvizCanvas (Xlib), GraphvizOutput (Canon, DotOutput),
   runGraphviz, runGraphvizCanvas')
 
 main = do
-  let g = transactionGraphToDot (transactionTypeGraph 0 exchangeTypeDiagram)
-  forkIO (runGraphvizCanvas' g Xlib)
-  runGraphviz g Canon "exchange.dot"
+  let g1 = transactionGraphToDot (transactionTypeGraph 0 exchange)
+      g2 = transactionGraphToDot (transactionTypeFamilyGraph Distinct [updateOracle, exchange, drain])
+  forkIO (runGraphvizCanvas' g1 Xlib)
+  forkIO (runGraphvizCanvas' g2 Xlib)
+  runGraphviz g2 Canon "update-exchange.dot"
 
-exchangeTypeDiagram :: TransactionTypeDiagram
-exchangeTypeDiagram = TransactionTypeDiagram {
+updateOracle :: TransactionTypeDiagram
+updateOracle = TransactionTypeDiagram {
+  transactionName = "updateOracle",
+  scriptInputs = Map.fromList [
+    ("oracle",
+     InputFromScript {fromScript = "Oracle 1", redeemer = "Update", datum = "OracleDatum", currencies = ["Token1"]})],
+  scriptOutputs = Map.fromList [
+    ("oracle",
+     OutputToScript {toScript = "Oracle 1", datum = "OracleDatum", currencies = ["Token1"]})],
+  walletInputs = mempty,
+  walletOutputs = mempty}
+
+exchange :: TransactionTypeDiagram
+exchange = TransactionTypeDiagram {
   transactionName = "exchange",
   scriptInputs = Map.fromList [
     ("exchange", InputFromScript {fromScript = "CentralExchange", redeemer = "()", datum = "()", currencies = []}),
@@ -41,4 +56,18 @@ exchangeTypeDiagram = TransactionTypeDiagram {
   walletOutputs = Map.fromList [
     ("wallet1", Wallet "Wallet 1" ["Token2"]),
     ("wallet2", Wallet "Wallet 2" ["Token1"])]}
+
+drain :: TransactionTypeDiagram
+drain = TransactionTypeDiagram {
+  transactionName = "drainCollectedFees",
+  scriptInputs = Map.fromList [
+    ("exchange",
+     InputFromScript {fromScript = "CentralExchange", redeemer = "()", datum = "()", currencies = ["Token1", "Token2"]})],
+  scriptOutputs = Map.fromList [
+    ("exchange",
+     OutputToScript {toScript = "CentralExchange", datum = "()", currencies = []})],
+  walletInputs = mempty,
+  walletOutputs = Map.fromList [
+    ("authority",
+     Wallet "Authority" ["Token1", "Token2"])]}
 ~~~
