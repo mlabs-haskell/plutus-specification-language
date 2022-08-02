@@ -70,22 +70,22 @@ transactionGraphToDot g = graphToDot params g'
             toLabel l : if isTransaction dest && nodeType src == 3 then [Weight $ Int 0] else []}
         clustering :: (Int, Text) -> NodeCluster Int (Int, Text)
         clustering (n, name)
-          | (Just (ins, node, _, outs), _) <- match n g =
+          | (Just (ins, node, _, outs), _) <- match n g, let noCluster = N (n, name) =
             case nodeType n of
               -- inputs from scripts
-              1 | [(_, script)] <- ins -> C script (N (n, name))
+              1 | [(_, script)] <- ins -> C script noCluster
               -- outputs from scripts
-              2 | [(_, script)] <- filter (not . isTransaction . snd) ins -> C script (N (n, name))
+              2 | [(_, script)] <- filter (not . isTransaction . snd) ins -> C script noCluster
               -- inputs from wallets
-              3 | [(_, wallet)] <- ins -> C wallet (N (n, name))
+              3 | [(_, wallet)] <- ins -> C wallet noCluster
               -- outputs from wallets
-              4 | [(_, wallet)] <- filter (not . isTransaction . snd) ins -> C wallet (N (n, name))
+              4 | [(_, wallet)] <- filter (not . isTransaction . snd) ins -> C wallet noCluster
               -- scripts
-              5 -> C n (N (n, name))
+              5 -> C n noCluster
               -- wallets
-              6 -> C n (N (n, name))
+              6 -> C n noCluster
               -- transactions
-              _ -> N (n, name)
+              _ -> noCluster
 
 data OverlayMode = Parallel | Serial
 
