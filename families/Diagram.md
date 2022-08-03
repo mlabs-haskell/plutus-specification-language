@@ -12,7 +12,7 @@ import Families.Diagram (
   InputFromScript (InputFromScript, currencies, datum, redeemer, fromScript),
   OutputToScript (OutputToScript, currencies, datum, toScript),
   Wallet (Wallet),
-  OverlayMode (Distinct),
+  OverlayMode (Distinct, Parallel, Serial),
   transactionGraphToDot, transactionTypeGraph, transactionTypeFamilyGraph)
 import Data.GraphViz (
   GraphvizCanvas (Xlib), GraphvizOutput (Canon, DotOutput),
@@ -21,9 +21,10 @@ import Data.GraphViz (
 main = do
   let g1 = transactionGraphToDot (transactionTypeGraph 0 exchange)
       g2 = transactionGraphToDot (transactionTypeFamilyGraph Distinct [updateOracle, exchange, drain])
-  forkIO (runGraphvizCanvas' g1 Xlib)
+      g3 = transactionGraphToDot (transactionTypeFamilyGraph Parallel [updateOracle, exchange, drain])
   forkIO (runGraphvizCanvas' g2 Xlib)
-  runGraphviz g2 Canon "update-exchange.dot"
+  forkIO (runGraphvizCanvas' g3 Xlib)
+  runGraphviz g3 Canon "update-exchange-drain.dot"
 
 updateOracle :: TransactionTypeDiagram
 updateOracle = TransactionTypeDiagram {
