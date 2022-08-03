@@ -78,9 +78,9 @@ transactionGraphToDot g = graphToDot params g' where
     | (Just (ins, node, _, outs), _) <- match n g, let noCluster = N (n, name) =
       case nodeType n of
         -- inputs from scripts
-        1 | [(_, script)] <- ins -> C script noCluster
+        1 | [(_, script)] <- nub $ filter (not . isTransaction . snd) ins -> C script noCluster
         -- outputs from scripts
-        2 | [(_, script)] <- filter (not . isTransaction . snd) ins -> C script noCluster
+        2 | [(_, script)] <- nub $ filter (not . isTransaction . snd) ins -> C script noCluster
         -- inputs from wallets
         3 | [(_, wallet)] <- ins -> C wallet noCluster
         -- outputs from wallets
@@ -116,6 +116,13 @@ transactionTypeFamilyGraph mode = mergeGraphs . foldr addTx (0, []) where
           nodeIdMap =
             Map.fromList (zip (foldMap (nodesOfType 5) gs) $ (7*total+) <$> [5, 12 ..])
             <> Map.fromList (zip (foldMap (nodesOfType 6) gs) $ (7*total+) <$> [6, 13 ..])
+            <> case mode of
+            Distinct -> mempty
+            Parallel -> 
+              Map.fromList (zip (foldMap (nodesOfType 1) gs) $ (7*total+) <$> [1, 8 ..])
+              <> Map.fromList (zip (foldMap (nodesOfType 2) gs) $ (7*total+) <$> [2, 9 ..])
+              <> Map.fromList (zip (foldMap (nodesOfType 3) gs) $ (7*total+) <$> [3, 10 ..])
+              <> Map.fromList (zip (foldMap (nodesOfType 4) gs) $ (7*total+) <$> [4, 11 ..])
           nodeMap :: IntMap Int
           nodeMap = foldMap (IntMap.fromList . mapMaybe targetNode . labNodes) gs
           targetNode :: (Int, NodeId) -> Maybe (Int, Int)
@@ -139,7 +146,7 @@ transactionTypeGraph :: Int -> TransactionTypeDiagram -> Gr NodeId Text
 transactionTypeGraph
   startIndex
   TransactionTypeDiagram{transactionName, scriptInputs, scriptOutputs, walletInputs, walletOutputs}
-  = mkGraph nodes edges where
+  = mkGraph nodes (nub edges) where
   nodes =
     (transactionNode, TransactionNamed transactionName)
     : (isNodes <> osNodes <> iwNodes <> owNodes <> scriptNodes <> walletNodes)
