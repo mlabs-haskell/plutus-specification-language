@@ -78,19 +78,21 @@ transactionGraphToDot g = graphToDot params g' where
     | (Just (ins, node, _, outs), _) <- match n g, let noCluster = N (n, name) =
       case nodeType n of
         -- inputs from scripts
-        1 | [(_, script)] <- nub $ filter (not . isTransaction . snd) ins -> C script noCluster
+        1 | [(_, script)] <- nub $ filter notToTransaction ins -> C script noCluster
         -- outputs from scripts
-        2 | [(_, script)] <- nub $ filter (not . isTransaction . snd) ins -> C script noCluster
+        2 | [(_, script)] <- nub $ filter notToTransaction ins -> C script noCluster
         -- inputs from wallets
         3 | [(_, wallet)] <- ins -> C wallet noCluster
         -- outputs from wallets
-        4 | [(_, wallet)] <- filter (not . isTransaction . snd) ins -> C wallet noCluster
+        4 | [(_, wallet)] <- filter notToTransaction ins -> C wallet noCluster
         -- scripts
         5 -> C n noCluster
         -- wallets
         6 -> C n noCluster
         -- transactions
         _ -> noCluster
+  notToTransaction :: (Text, Int) -> Bool
+  notToTransaction = not . isTransaction . snd
 
 data OverlayMode = Distinct | Parallel | Serial
 
@@ -113,16 +115,11 @@ transactionTypeFamilyGraph mode = mergeGraphs . foldr addTx (0, []) where
   mergeGraphs :: (Int, [Gr NodeId Text]) -> Gr NodeId Text
   mergeGraphs (total, gs) = gconcat (replaceFixedNodes <$> gs)
     where nodeIdMap :: Map NodeId Int
-          nodeIdMap =
-            Map.fromList (zip (foldMap (nodesOfType 5) gs) $ (7*total+) <$> [5, 12 ..])
-            <> Map.fromList (zip (foldMap (nodesOfType 6) gs) $ (7*total+) <$> [6, 13 ..])
-            <> case mode of
-            Distinct -> mempty
-            Parallel -> 
-              Map.fromList (zip (foldMap (nodesOfType 1) gs) $ (7*total+) <$> [1, 8 ..])
-              <> Map.fromList (zip (foldMap (nodesOfType 2) gs) $ (7*total+) <$> [2, 9 ..])
-              <> Map.fromList (zip (foldMap (nodesOfType 3) gs) $ (7*total+) <$> [3, 10 ..])
-              <> Map.fromList (zip (foldMap (nodesOfType 4) gs) $ (7*total+) <$> [4, 11 ..])
+          nodeIdMap = case mode of
+            Distinct -> foldMap nodeMapOfType [5..6]
+            Parallel -> foldMap nodeMapOfType [1..6]
+          nodeMapOfType :: Int -> Map NodeId Int
+          nodeMapOfType n = Map.fromList (zip (foldMap (nodesOfType n) gs) $ (7*total+) <$> [n, n+7 ..])
           nodeMap :: IntMap Int
           nodeMap = foldMap (IntMap.fromList . mapMaybe targetNode . labNodes) gs
           targetNode :: (Int, NodeId) -> Maybe (Int, Int)
@@ -163,10 +160,7 @@ transactionTypeGraph
           | (name, Wallet w currencies) <- Map.toList walletOutputs,
             let [(n, _)] = filter ((WalletUTxO w currencies ==) . snd) owNodes]
        <> [ (scriptNode, n, "")
-          | (n, ScriptUTxO name _ _) <- isNodes,
-            let [(scriptNode, _)] = filter ((ScriptNamed name ==) . snd) scriptNodes]
-       <> [ (scriptNode, n, "")
-          | (n, ScriptUTxO name _ _) <- osNodes,
+          | (n, ScriptUTxO name _ _) <- isNodes <> osNodes,
             let [(scriptNode, _)] = filter ((ScriptNamed name ==) . snd) scriptNodes]
        <> [ (walletNode, n, "")
           | (n, WalletUTxO name _) <- iwNodes <> owNodes,
