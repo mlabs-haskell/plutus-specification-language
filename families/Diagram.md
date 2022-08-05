@@ -19,10 +19,10 @@ import Data.GraphViz (
   runGraphviz, runGraphvizCanvas')
 
 main = do
-  let g1 = transactionGraphToDot (transactionTypeGraph 0 exchange)
-      g2 = transactionGraphToDot (transactionTypeFamilyGraph Distinct [updateOracle, exchange, drain])
-      g3 = transactionGraphToDot (transactionTypeFamilyGraph Parallel [updateOracle, exchange, drain])
-      g4 = transactionGraphToDot (transactionTypeFamilyGraph Serial [updateOracle, exchange, drain])
+  let g1 = transactionGraphToDot "exchange" (transactionTypeGraph 0 exchange)
+      g2 = transactionGraphToDot "distinct" (transactionTypeFamilyGraph Distinct [updateOracle, exchange, drain])
+      g3 = transactionGraphToDot "parallel" (transactionTypeFamilyGraph Parallel [updateOracle, exchange, drain])
+      g4 = transactionGraphToDot "serial" (transactionTypeFamilyGraph Serial [updateOracle, exchange, drain])
   forkIO (runGraphvizCanvas' g2 Xlib)
   forkIO (runGraphvizCanvas' g3 Xlib)
   forkIO (runGraphvizCanvas' g4 Xlib)
