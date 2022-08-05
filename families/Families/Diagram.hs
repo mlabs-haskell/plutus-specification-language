@@ -22,7 +22,7 @@ import Data.Graph.Inductive (Context, Gr, empty, gmap, labEdges, labNodes, match
 import Data.GraphViz (
   DotGraph, GraphvizCanvas (Xlib), GraphvizOutput (Canon, DotOutput),
   GlobalAttributes (GraphAttrs),
-  GraphvizParams(clusterBy, clusterID, fmtCluster, fmtEdge, fmtNode, isDotCluster),
+  GraphvizParams(clusterBy, clusterID, fmtCluster, fmtEdge, fmtNode, globalAttributes, isDotCluster),
   NodeCluster (C, N), GraphID (Num), Number (Int),
   defaultParams, graphToDot, preview, runGraphviz, runGraphvizCanvas', toLabel)
 import Data.GraphViz.Attributes.Complete (Attribute (Shape, Weight), Shape (DoubleOctagon))
@@ -57,8 +57,8 @@ nodeType = (`mod` 7)
 isTransaction :: Int -> Bool
 isTransaction = (== 0) . nodeType
 
-transactionGraphToDot :: Gr NodeId Text -> DotGraph Int
-transactionGraphToDot g = graphToDot params g' where
+transactionGraphToDot :: Text -> Gr NodeId Text -> DotGraph Int
+transactionGraphToDot caption g = graphToDot params g' where
   g' :: Gr Text Text
   g' = first nodeLabel $ foldr dropNode g (filter ((> 4) . nodeType) $ map fst $ labNodes g)
   -- drop script and wallet nodes
@@ -66,6 +66,7 @@ transactionGraphToDot g = graphToDot params g' where
   dropNode n gr = snd (match n gr)
   params :: GraphvizParams Int Text Text Int Text
   params = defaultParams{
+    globalAttributes = [GraphAttrs [toLabel caption]],
     clusterID = Num . Int,
     clusterBy = clustering,
     fmtCluster = \ n -> case match n g of
