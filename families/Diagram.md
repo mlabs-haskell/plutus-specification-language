@@ -22,9 +22,11 @@ main = do
   let g1 = transactionGraphToDot (transactionTypeGraph 0 exchange)
       g2 = transactionGraphToDot (transactionTypeFamilyGraph Distinct [updateOracle, exchange, drain])
       g3 = transactionGraphToDot (transactionTypeFamilyGraph Parallel [updateOracle, exchange, drain])
+      g4 = transactionGraphToDot (transactionTypeFamilyGraph Serial [updateOracle, exchange, drain])
   forkIO (runGraphvizCanvas' g2 Xlib)
   forkIO (runGraphvizCanvas' g3 Xlib)
-  runGraphviz g3 Canon "update-exchange-drain.dot"
+  forkIO (runGraphvizCanvas' g4 Xlib)
+  runGraphviz g4 Canon "update-exchange-drain.dot"
 
 updateOracle :: TransactionTypeDiagram
 updateOracle = TransactionTypeDiagram {

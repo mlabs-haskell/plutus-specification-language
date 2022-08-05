@@ -7,13 +7,14 @@ import HKD
 import Control.Arrow ((&&&))
 import Data.Bifunctor (first, second)
 import Data.Kind (Type)
-import Data.List (nub)
+import Data.List (foldl', nub, sortOn)
 import Data.IntMap (IntMap)
 import Data.Map (Map)
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe)
 import Data.Foldable (toList)
+import Data.Ord (Down (Down))
 import Data.String (IsString)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -75,7 +76,7 @@ transactionGraphToDot g = graphToDot params g' where
       toLabel l : if isTransaction dest && nodeType src == 3 then [Weight $ Int 0] else []}
   clustering :: (Int, Text) -> NodeCluster Int (Int, Text)
   clustering (n, name)
-    | (Just (ins, node, _, outs), _) <- match n g, let noCluster = N (n, name) =
+    | (Just (ins, node, _, _outs), _) <- match n g, let noCluster = N (n, name) =
       case nodeType n of
         -- inputs from scripts
         1 | [(_, script)] <- nub $ filter notToTransaction ins -> C script noCluster
@@ -94,7 +95,7 @@ transactionGraphToDot g = graphToDot params g' where
   notToTransaction :: (Text, Int) -> Bool
   notToTransaction = not . isTransaction . snd
 
-data OverlayMode = Distinct | Parallel | Serial
+data OverlayMode = Distinct | Parallel | Serial deriving (Eq, Ord, Show)
 
 data NodeId = ScriptNamed Text
             | WalletNamed Text
@@ -111,30 +112,50 @@ nodeLabel ScriptUTxO {currencies} = Text.intercalate ", " (currencyName <$> curr
 nodeLabel (WalletUTxO _ currencies) = Text.intercalate ", " (currencyName <$> currencies)
 
 transactionTypeFamilyGraph :: OverlayMode -> [TransactionTypeDiagram] -> Gr NodeId Text
-transactionTypeFamilyGraph mode = mergeGraphs . foldr addTx (0, []) where
+transactionTypeFamilyGraph mode = mergeGraphs . foldl' addTx (0, []) where
   mergeGraphs :: (Int, [Gr NodeId Text]) -> Gr NodeId Text
-  mergeGraphs (total, gs) = gconcat (replaceFixedNodes <$> gs)
-    where nodeIdMap :: Map NodeId Int
-          nodeIdMap = case mode of
-            Distinct -> foldMap nodeMapOfType [5..6]
-            Parallel -> foldMap nodeMapOfType [1..6]
-          nodeMapOfType :: Int -> Map NodeId Int
-          nodeMapOfType n = Map.fromList (zip (foldMap (nodesOfType n) gs) $ (7*total+) <$> [n, n+7 ..])
-          nodeMap :: IntMap Int
-          nodeMap = foldMap (IntMap.fromList . mapMaybe targetNode . labNodes) gs
-          targetNode :: (Int, NodeId) -> Maybe (Int, Int)
-          targetNode (n, node) = (,) n <$> Map.lookup node nodeIdMap
-          nodesOfType :: Int -> Gr NodeId Text -> [NodeId]
-          nodesOfType t g = snd <$> filter ((t ==) . nodeType . fst) (labNodes g)
-          replaceFixedNodes :: Gr NodeId Text -> Gr NodeId Text
-          replaceFixedNodes g = mkGraph (first switchNode <$> labNodes g) (switchEnds <$> labEdges g)
-          switchEnds (start, end, label) = (switchNode start, switchNode end, label)
-          switchNode n = IntMap.findWithDefault n n nodeMap
-  addTx :: TransactionTypeDiagram -> (Int, [Gr NodeId Text]) -> (Int, [Gr NodeId Text])
-  addTx d (!total, gs) = (total + maxNodeCount d, transactionTypeGraph total d : gs)
+  mergeGraphs (total, gs) = replaceFixedNodes mode total g
+    where g = gconcat gs
+  addTx :: (Int, [Gr NodeId Text]) -> TransactionTypeDiagram -> (Int, [Gr NodeId Text])
+  addTx (!total, gs) d = (total + maxNodeCount d, transactionTypeGraph total d : gs)
   maxNodeCount :: TransactionTypeDiagram -> Int
   maxNodeCount TransactionTypeDiagram{scriptInputs, scriptOutputs, walletInputs, walletOutputs} =
     1 `max` (length scriptInputs + length scriptOutputs) `max` (length walletInputs + length walletOutputs)
+
+replaceFixedNodes :: OverlayMode -> Int -> Gr NodeId Text -> Gr NodeId Text
+replaceFixedNodes mode total g =
+  mkGraph (sortOn (Down . fst) $ first switchNode <$> labNodes g) (switchEnds <$> labEdges g)
+  where g' = replaceFixedNodes Distinct total g
+        switchEnds (start, end, label) = (switchNode start, switchNode end, label)
+        switchNode n = IntMap.findWithDefault n n nodeMap
+        nodeIdMap :: Map NodeId Int
+        nodeIdMap = case mode of
+          Parallel -> foldMap nodeMapOfType [1..6]
+          _ -> foldMap nodeMapOfType [5..6]
+        nodeMapOfType :: Int -> Map NodeId Int
+        nodeMapOfType n = Map.fromList (zip (nodesOfType n g) $ (7*total+) <$> [n, n+7 ..])
+        nodesOfType :: Int -> Gr NodeId Text -> [NodeId]
+        nodesOfType t g = snd <$> filter ((t ==) . nodeType . fst) (labNodes g)
+        nodeMap :: IntMap Int
+        nodeMap = case mode of
+          Serial -> IntMap.fromList $ mapMaybe targetUTxO $ labNodes g
+          _ -> IntMap.fromList $ mapMaybe targetNode $ labNodes g
+        targetNode :: (Int, NodeId) -> Maybe (Int, Int)
+        targetNode (n, node) = (,) n <$> Map.lookup node nodeIdMap
+        targetUTxO :: (Int, NodeId) -> Maybe (Int, Int)
+        targetUTxO (n, node)
+          | nodeType n `elem` [1, 3],
+            (Just ([(_, address)], _, _, [(_, trans)]), _) <- match n g',
+            (Just ([], _, _, utxos), _) <- match address g',
+            _:(_, n'):_ <- takeWhile ((n /=) . snd) $ sortOn snd utxos,
+            nodeType n' `elem` [2, 4],
+            (Just (ins, _, node', []), _) <- match n' g',
+            node' == node,
+            [(_, trans')] <- filter ((/= address) . snd) ins,
+            trans' < trans =
+              Just (n, n')
+          | nodeType n `elem` [5, 6] = (,) n <$> Map.lookup node nodeIdMap
+          | otherwise = Nothing
 
 gconcat :: [Gr a b] -> Gr a b
 gconcat = uncurry mkGraph . mconcat . map (labNodes &&& labEdges)
