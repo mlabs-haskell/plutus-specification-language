@@ -1,98 +1,60 @@
-# High-level specification language
+# Plutus specification language
 
-## Motivation / Definition
+A specification is a mathematical (unordered) set of diagrams (unrelated to category theory).
 
-We want to talk about the subset of protocols on Cardano that are *sensible*.
+There are some core operations defined over diagrams, from the EPSL type class.
 
-What is a protocol? We define a simplified model of Cardano for this.
+Diagrams denote what transactions should be accepted.
+Diagrams are of a specific protocol `p`.
+Diagrams form a monoid.
+The empty diagram matches no transactions.
+The monoidal operation combines the predicates.
+Any inputs of `p` in the transaction should be in the diagram, and vice versa.
+Any mint of `p` in the transaction should be in the diagram, and vice versa.
 
-A transaction is a set of *inputs* (i.e. unordered list), a set of *outputs*,
-the *minted/burned* value, and a *validity range* (pair of time).
+The value of inputs and outputs must match exactly.
 
-Inputs and outputs contain value and are locked by a *protocol*.
+Given the properties of the specification language,
+we have the property, that two transactions with the same validity range that only
+interact with disjoint protocols, can be merged (if the signatures can be redone),
+such that the merged transaction has the same effect on the protocol state of all
+involved protocols.
 
-```idris
-record UTXO where
-  constructor MkUTXO
-  protocol : ProtocolDef
-  value : Value
-  datum : protocol.datumType
+## Predicates
 
-record TxIn where
-  constructor MkTxIn
-  utxo : UTXO
-  ref : Maybe UTXORef
+### `requireInput`
 
-record TxOut where
-  constructor MkTxOut
-  utxo : UTXO
-  unique : Bool -- FIXME: Nonsense for an output locked by p in the context of p
+The input (of another protocol) in question **must** be in the transaction.
 
-record Tx where
-  constructor MkTx
-  inputs : Set TxIn
-  outputs : List TxOut
-  mint : Value
-  signatures : Set PubKeyHash
-  validRange : POSIXTimeRange
-```
+### `requireOwnInput`
 
-This definition might be expanded to include more of the underlying transaction's
-information.
+The input (of `p`) in question **must** be in the transaction.
 
-*Protocols* are essentially sets of permissible transaction.
-They are modelled as so:
-```idris
-record ProtocolDef where
-  constructor MkProtocolDef
-  datumType : Type
-  permissibleType : Type
-  permissible : permissibleType -> (self : ProtocolIdentity) -> Tx
+### `createOwnOutput`
 
-identityFor : ProtocolDef -> ProtocolIdentity
+The output (of `p`) must exist.
 
-record Protocol
-  constructor MkProtocol
-  def : ProtocolDef
-  toPreserveType : datumType -> Type
-  assumeExists : datumType -> Type
-  noOverlapProof : (x : permissibleType) -> (y : permissibleType) -> (tx : Tx) -> Not (txMatches def tx x, txMatches def tx y)
-  reducibleProof : ?reducibleProofType
-  coverageProof : ?coverageProofType
-```
+### `witnessOutput`
 
-Let us now define transaction validity (we ignore protocol limits for this):
-A transaction `t` is valid if for every protocol `p` that it references,
-there is an `x : p.permissibleType` such that `let t' = p.permissible x p` is
-such that the inputs and outputs of `t'` and `t` that are locked by `p` match exactly.
-The tokens of `p` minted by `t'` and `t` must also match exactly.
-It must also be that for all fields of `t'`, they must be "subsets of" the
-corresponding fields of `t`.
-Any inputs or outputs that `t'` references of other protocols, must also be present
-in `t` (but not necessarily vice versa).
-Any signature in `t'` must also be in `t`.
-Anything minted in `t'` must also be minted in `t`.
-`validRange` must match exactly.
+The output (of another protocol) must exist.
 
-The following is true by definition:
-Given a transaction that references one set of protocols,
-and a transaction that references another set of protocols,
-such that they are disjoint sets of protocols, then
-provided that the `validRange` matches exactly,
-those two transactions can be combined in such a way that
-the combined transaction has the same effect (consumes
-the same UTXOs and outputs equivalent UTXOs), given
-that the signatures are also combined from both transactions.
+### `createOutput`
 
-## Soundness of a protocol
+The output (of another ptocol) must be created.
+Another diagram of a different protocol can not share
+the same created output with `createOutput`.
 
-A protocol has the concept of *soundness*, which a protocol should adhere to
-if it is to be sensible rather than nonsensible.
+### `mintOwn`
 
-### Lack of overlap
+The token name (of `p`) and amount must be exactly present
+in the transaction.
+No more or no less must be minted.
 
-There must not be a transaction `t` that for protocol `p` validates
-with both `x : p.permissibleType` **and** `y : p.permissibleType` where `Not (x === y)`.
-This is a logical bug in the protocol.
+### `witnessMint`
 
-### Full coverage
+
+# Contributing
+
+`nix run .#regen`
+`nix develop`
+`cabal repl --repl-options=-Wwarn`
