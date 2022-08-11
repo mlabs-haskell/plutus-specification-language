@@ -1,9 +1,15 @@
-{-# LANGUAGE UndecidableSuperClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
+module PSL (x) where
 
-module Plutarch.PSL where
-  
+import Plutarch.Prelude
+
+data PBool ef = PTrue | PFalse
+  deriving stock (Generic)
+  deriving anyclass (PHasRepr)
+
+x :: PConstructable edsl PBool => Term edsl PBool
+x = pcon PTrue
+
+{-
 import Data.Kind (Type)
 import Plutarch.EType
 import Plutarch.Core
@@ -236,3 +242,4 @@ maksCases c = ematch c \case
 data MaksProtocol
 instance Protocol MaksProtocol MaksDatum where
   specification _ = Specification @MaksDatum @MaksCase maksCases
+-}
