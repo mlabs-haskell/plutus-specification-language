@@ -1,7 +1,7 @@
 # Typing transaction families as HKDs
 
 ~~~ {.haskell}
-{-# LANGUAGE DuplicateRecordFields, OverloadedStrings #-}
+{-# LANGUAGE DataKinds, DuplicateRecordFields, OverloadedStrings, TemplateHaskell #-}
 module Diagram where
 
 import Control.Concurrent (forkIO)
@@ -17,6 +17,12 @@ import Families.Diagram (
 import Data.GraphViz (
   GraphvizCanvas (Xlib), GraphvizOutput (Canon, DotOutput),
   runGraphviz, runGraphvizCanvas')
+import qualified Language.Haskell.TH as TH
+import Families.Diagram.TH (diagramForTransactionType, untypedDiagramForTransactionType)
+import qualified HKD
+
+e1 = $( [t| 'HKD.Exchange 1 2 |] >>= untypedDiagramForTransactionType)
+d1 = $$(diagramForTransactionType $ TH.PromotedT $ TH.mkName "HKD.DrainCollectedFees")
 
 main = do
   let g1 = transactionGraphToDot "exchange" (transactionTypeGraph 0 exchange)

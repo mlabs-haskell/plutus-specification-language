@@ -190,7 +190,7 @@ transactionTypeGraph
   transactionNode = 7*startIndex
   isNodes =
     [ (7*n+1, ScriptUTxO fromScript datum currencies)
-    | (n, (name, InputFromScript {fromScript, datum, currencies})) <- zip [startIndex..] $ Map.toList scriptInputs ]
+    | (n, (name, InputFromScript {fromScript, datum, currencies})) <- zip [startIndex..] $ Map.toList scriptInputs]
   osNodes =
     [ (7*n+2, ScriptUTxO toScript datum currencies)
     | (n, (name, OutputToScript {toScript, datum, currencies})) <- zip [startIndex..] $ Map.toList scriptOutputs]
