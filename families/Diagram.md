@@ -21,14 +21,15 @@ import qualified Language.Haskell.TH as TH
 import Families.Diagram.TH (diagramForTransactionType, untypedDiagramForTransactionType)
 import qualified HKD
 
+u1 = $( [t| 'HKD.UpdateOracle 1 |] >>= untypedDiagramForTransactionType)
 e1 = $( [t| 'HKD.Exchange 1 2 |] >>= untypedDiagramForTransactionType)
 d1 = $$(diagramForTransactionType $ TH.PromotedT $ TH.mkName "HKD.DrainCollectedFees")
 
 main = do
   let g1 = transactionGraphToDot "exchange" (transactionTypeGraph 0 exchange)
-      g2 = transactionGraphToDot "distinct" (transactionTypeFamilyGraph Distinct [updateOracle, exchange, drain])
+      g2 = transactionGraphToDot "distinct" (transactionTypeFamilyGraph Distinct [u1, e1, d1])
       g3 = transactionGraphToDot "parallel" (transactionTypeFamilyGraph Parallel [updateOracle, exchange, drain])
-      g4 = transactionGraphToDot "serial" (transactionTypeFamilyGraph Serial [updateOracle, exchange, drain])
+      g4 = transactionGraphToDot "serial" (transactionTypeFamilyGraph Serial [u1, e1, d1])
   forkIO (runGraphvizCanvas' g2 Xlib)
   forkIO (runGraphvizCanvas' g3 Xlib)
   forkIO (runGraphvizCanvas' g4 Xlib)

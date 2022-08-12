@@ -7,6 +7,7 @@
 
 {-# Language ImportQualifiedPost #-}
 {-# Language LambdaCase #-}
+{-# Language OverloadedStrings #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language TemplateHaskell #-}
 
@@ -22,6 +23,7 @@ import Families.Diagram (
   Currency (..),
   )
 
+import Data.List (elemIndex)
 import Data.Map qualified as Map
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
@@ -30,7 +32,7 @@ import GHC.Stack (HasCallStack)
 import Language.Haskell.TH qualified as TH
 import Language.Haskell.TH.Syntax (liftTyped)
 
-type TypeReifier a = TH.Name -> TH.Name -> TH.Type -> Maybe (TH.Code TH.Q a)
+type TypeReifier a = TH.Name -> TH.Name -> [TH.Name] -> TH.Type -> Maybe (TH.Code TH.Q a)
 
 untypedDiagramForTransactionType :: TH.Type -> TH.Q TH.Exp
 untypedDiagramForTransactionType = TH.unTypeCode . diagramForTransactionType
@@ -48,7 +50,7 @@ diagramForTransactionType t = TH.Code $ do
   TH.examineCode
     [||
       TransactionTypeDiagram
-        $$(textLiteral $ typeDescription t)
+        $$(textLiteral $ typeDescription [] t)
         (Map.fromList $$(reifyMapField t ''Inputs reifyScriptInput t))
         (Map.fromList $$(reifyMapField t ''Outputs reifyScriptOutput t))
         (Map.fromList $$(reifyMapField t ''Inputs reifyWallet t))
@@ -78,9 +80,10 @@ reifyMapField t assocTypeName reifyType recordType = TH.Code $ do
   (tyConName, tyVars, cons) <- case tyCon of
     TH.DataD _ nm tyVars _kind cons _ -> pure (nm, tyVars, cons)
     d -> (typeName, [], []) <$ TH.reportError ("Unexpected declaration of " <> TH.pprint tyCon <> ": " <> show d)
-  (walletVar, scriptVar) <- case reverse tyVars of
-    a:b:_ -> pure (unKind a, unKind b)
-    _ -> (tyConName, tyConName) <$ TH.reportError ("Less than two type vars on " <> TH.pprint tyCon <> " declaration")
+  (walletVar, scriptVar, rest) <- case reverse tyVars of
+    a:b:vs -> pure (unKind a, unKind b, unKind <$> reverse vs)
+    _ ->
+      (tyConName, tyConName, []) <$ TH.reportError ("Less than two type vars on " <> TH.pprint tyCon <> " declaration")
   fields <- case cons of
     [TH.RecC _ flds] -> pure flds
     [_] -> [] <$ TH.reportError ("Non-record data " <> TH.pprint tyConName <> " declaration")
@@ -88,13 +91,13 @@ reifyMapField t assocTypeName reifyType recordType = TH.Code $ do
     _ -> [] <$ TH.reportError ("Multiple data " <> TH.pprint tyConName <> " constructors")
   let reifyField :: TH.VarBangType -> Maybe (TH.Q (TH.TExp (Text, a)))
       reifyField (name, _, fieldType) =
-        TH.examineCode . (flip TH.bindCode $ addName name) . TH.examineCode <$> reifyType scriptVar walletVar fieldType
+        TH.examineCode . (flip TH.bindCode $ addName name) . TH.examineCode <$> reifyType scriptVar walletVar rest fieldType
       addName :: TH.Name -> TH.TExp a -> TH.Code TH.Q (Text, a) 
       addName name a = [|| (Text.pack $$(stringLiteral $ TH.nameBase name), $$(TH.Code $ pure a)) ||]
   sequenceExps $ sequenceA $ mapMaybe reifyField fields
 
 reifyScriptInput :: HasCallStack => TypeReifier InputFromScript
-reifyScriptInput scriptVar _walletVar
+reifyScriptInput scriptVar _walletVar vars
   (TH.AppT
     (TH.AppT
       (TH.AppT (TH.VarT s) scriptType)
@@ -102,50 +105,52 @@ reifyScriptInput scriptVar _walletVar
     currencies)
   | s == scriptVar = Just
     [||
-      InputFromScript $$(textLiteral $ typeDescription scriptType) $$(textLiteral $ typeDescription redeemerType) mempty $$(currencyDescriptions currencies)
+      InputFromScript $$(textLiteral $ typeDescription vars scriptType) $$(textLiteral $ typeDescription vars redeemerType) mempty $$(currencyDescriptions vars currencies)
     ||]
-reifyScriptInput _ _ _ = Nothing
+reifyScriptInput _ _ _ _ = Nothing
 
 reifyWallet :: HasCallStack => TypeReifier Wallet
-reifyWallet _scriptVar walletVar (TH.AppT (TH.VarT w) currencies)
+reifyWallet _scriptVar walletVar vars (TH.AppT (TH.VarT w) currencies)
   | w == walletVar = Just
     [||
-      Wallet (Text.pack "W") $$(currencyDescriptions currencies)
+      Wallet (Text.pack "W") $$(currencyDescriptions vars currencies)
     ||]
-reifyWallet _ _ _ = Nothing
+reifyWallet _ _ _ _ = Nothing
 
 reifyScriptOutput :: HasCallStack => TypeReifier OutputToScript
-reifyScriptOutput scriptVar _walletVar
+reifyScriptOutput scriptVar _walletVar vars
   (TH.AppT
     (TH.AppT (TH.VarT s) scriptType)
     currencies)
   | s == scriptVar = Just
     [||
-      OutputToScript $$(textLiteral $ typeDescription scriptType) mempty $$(currencyDescriptions currencies)
+      OutputToScript $$(textLiteral $ typeDescription vars scriptType) mempty $$(currencyDescriptions vars currencies)
     ||]
-reifyScriptOutput _ _ _ = Nothing
+reifyScriptOutput _ _ _ _ = Nothing
 
-currencyDescriptions :: HasCallStack => TH.Type -> TH.Code TH.Q [Currency]
-currencyDescriptions =
-  TH.unsafeCodeCoerce . pure . TH.ListE . map (TH.LitE . TH.StringL . Text.unpack) . typeDescriptions
+currencyDescriptions :: HasCallStack => [TH.Name] -> TH.Type -> TH.Code TH.Q [Currency]
+currencyDescriptions vars =
+  TH.unsafeCodeCoerce . pure . TH.ListE . map (TH.LitE . TH.StringL . Text.unpack) . typeDescriptions vars
 
-typeDescriptions :: HasCallStack => TH.Type -> [Text]
-typeDescriptions (TH.AppT (TH.AppT TH.PromotedConsT t) ts) = typeDescription t : typeDescriptions ts
-typeDescriptions TH.PromotedNilT = []
-typeDescriptions (TH.SigT t _) = typeDescriptions t
+typeDescriptions :: HasCallStack => [TH.Name] -> TH.Type -> [Text]
+typeDescriptions vars (TH.AppT (TH.AppT TH.PromotedConsT t) ts) = typeDescription vars t : typeDescriptions vars ts
+typeDescriptions vars TH.PromotedNilT = []
+typeDescriptions vars (TH.SigT t _) = typeDescriptions vars t
 
-typeDescription :: HasCallStack => TH.Type -> Text
-typeDescription (TH.PromotedT name) = Text.pack (TH.nameBase name)
-typeDescription (TH.LitT (TH.NumTyLit n)) = Text.pack (show n)
-typeDescription t@TH.PromotedTupleT{} = Text.pack (dropWhile (== '\'') $ TH.pprint t)
-typeDescription (TH.AppT a TH.VarT{}) = typeDescription a
-typeDescription (TH.AppT a b) = typeDescription a <> typeDescription b
-typeDescription (TH.SigT t _) = typeDescription t
-typeDescription t = error ("Can't describe type " <> TH.pprint t)
+typeDescription :: HasCallStack => [TH.Name] -> TH.Type -> Text
+typeDescription _ (TH.PromotedT name) = Text.pack (TH.nameBase name)
+typeDescription _ (TH.LitT (TH.NumTyLit n)) = Text.pack (show n)
+typeDescription _ t@TH.PromotedTupleT{} = Text.pack (dropWhile (== '\'') $ TH.pprint t)
+typeDescription vars (TH.AppT t (TH.VarT v)) =
+  typeDescription vars t <> foldMap ((" " <>) . Text.pack . show . succ) (elemIndex v vars)
+typeDescription vars (TH.AppT a b) = typeDescription vars a <> " " <> typeDescription vars b
+typeDescription vars (TH.SigT t _) = typeDescription vars t
+typeDescription _ t = error ("Can't describe type " <> TH.pprint t)
 
 typeName :: TH.Type -> TH.Name
 typeName (TH.ConT name) = name
 typeName (TH.AppT t TH.VarT{}) = typeName t
+typeName (TH.SigT t _) = typeName t
 typeName t = error (TH.pprint t <> " is not a named type.")
 
 stringLiteral :: String -> TH.Code TH.Q String
