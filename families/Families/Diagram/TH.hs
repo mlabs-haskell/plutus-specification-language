@@ -85,6 +85,7 @@ reifyMapField t assocTypeName reifyType recordType = TH.Code $ do
     _ ->
       (tyConName, tyConName, []) <$ TH.reportError ("Less than two type vars on " <> TH.pprint tyCon <> " declaration")
   fields <- case cons of
+    [TH.NormalC _ []] -> pure []
     [TH.RecC _ flds] -> pure flds
     [_] -> [] <$ TH.reportError ("Non-record data " <> TH.pprint tyConName <> " declaration")
     [] -> [] <$ TH.reportError ("Empty data " <> TH.pprint tyConName <> " declaration")
