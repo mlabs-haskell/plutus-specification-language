@@ -144,18 +144,24 @@ replaceFixedNodes mode total g =
         targetNode (n, node) = (,) n <$> Map.lookup node nodeIdMap
         targetUTxO :: (Int, NodeId) -> Maybe (Int, Int)
         targetUTxO (n, node)
-          | nodeType n `elem` [1, 3],
-            (Just ([(_, address)], _, _, [(_, trans)]), _) <- match n g',
-            (Just ([], _, _, utxos), _) <- match address g',
-            _:(_, n'):_ <- takeWhile ((n /=) . snd) $ sortOn snd utxos,
-            nodeType n' `elem` [2, 4],
-            (Just (ins, _, node', []), _) <- match n' g',
-            node' == node,
-            [(_, trans')] <- filter ((/= address) . snd) ins,
-            trans' < trans =
-              Just (n, n')
+          | nodeType n `elem` [1, 3], -- input UTxOs
+            (Just ([(_, address)], _, _, [(_, trans)]), _) <- match n g', -- address and transaction consuming the UTxO
+            (Just ([], _, _, utxos), _) <- match address g', -- all UTxOs at the address
+            (_, n'):_ <- reverse
+                         $ filter (matchingOutput n node address trans . snd)
+                         $ takeWhile ((< n) . snd) $ sortOn snd utxos
+          = Just (n, n')
           | nodeType n `elem` [5, 6] = (,) n <$> Map.lookup node nodeIdMap
           | otherwise = Nothing
+        -- | given an input UTxO, its address, transaction consuming it, and another UTxO,
+        -- decide if the latter UTxO can serve as the former
+        matchingOutput :: Int -> NodeId -> Int -> Int -> Int -> Bool
+        matchingOutput n inputNode address trans n'
+          | nodeType n' `elem` [2, 4],
+            (Just (ins, _, outputNode, []), _) <- match n' g',
+            [(_, trans')] <- filter ((< address) . snd) ins
+          = inputNode == outputNode && trans' < trans
+          | otherwise = False
 
 gconcat :: [Gr a b] -> Gr a b
 gconcat = uncurry mkGraph . mconcat . map (labNodes &&& labEdges)
