@@ -51,25 +51,14 @@ diagramForTransactionType t = TH.Code $ do
     [||
       TransactionTypeDiagram
         $$(textLiteral $ typeDescription [] t)
-        (Map.fromList $$(reifyMapField t ''Inputs reifyScriptInput t))
-        (Map.fromList $$(reifyMapField t ''Outputs reifyScriptOutput t))
-        (Map.fromList $$(reifyMapField t ''Inputs reifyWallet t))
-        (Map.fromList $$(reifyMapField t ''Outputs reifyWallet t))
+        (Map.fromList $$(reifyMapField t ''Inputs reifyScriptInput))
+        (Map.fromList $$(reifyMapField t ''Outputs reifyScriptOutput))
+        (Map.fromList $$(reifyMapField t ''Inputs reifyWallet))
+        (Map.fromList $$(reifyMapField t ''Outputs reifyWallet))
     ||]
-{-
-    [||
-      TransactionTypeDiagram {
-        transactionName = Text.pack $$(TH.unsafeCodeCoerce $ pure $ TH.LitE $ TH.StringL $ TH.pprint t),
-        scriptInputs = Map.fromList [],
-        scriptOutputs = Map.fromList [],
-        walletInputs = Map.fromList [],
-        walletOutputs = Map.fromList []
-        }
-    ||]
--}
 
-reifyMapField :: forall a. TH.Type -> TH.Name -> TypeReifier a -> TH.Type -> TH.Code TH.Q [(Text, a)]
-reifyMapField t assocTypeName reifyType recordType = TH.Code $ do
+reifyMapField :: forall a. TH.Type -> TH.Name -> TypeReifier a -> TH.Code TH.Q [(Text, a)]
+reifyMapField t assocTypeName reifyType = TH.Code $ do
   let description = TH.pprint assocTypeName <> " '" <> TH.pprint t
   typeName <- TH.reifyInstances assocTypeName [t] >>= \case
     [TH.TySynInstD (TH.TySynEqn _ _ t')] -> pure (typeName t')
