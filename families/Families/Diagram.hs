@@ -50,16 +50,30 @@ data Wallet = Wallet {
 
 newtype Currency = Currency {currencyName :: Text} deriving (Eq, Ord, IsString, Show)
 
-nodeType :: Int -> Int
-nodeType = (`mod` 7)
+data NodeType =
+  Transaction
+  | TransactionInputFromScript
+  | TransactionOutputToScript
+  | TransactionInputFromWallet
+  | TransactionOutputToWallet
+  | ScriptAddress
+  | WalletAddress
+  deriving (Bounded, Enum, Eq, Ord, Show)
+
+nodeType :: Int -> NodeType
+nodeType = toEnum . (`mod` nodeTypeRange)
+
+nodeTypeRange :: Int
+nodeTypeRange = fromEnum (maxBound :: NodeType) + 1
 
 isTransaction :: Int -> Bool
-isTransaction = (== 0) . nodeType
+isTransaction = (== Transaction) . nodeType
 
 transactionGraphToDot :: Text -> Gr NodeId Text -> DotGraph Int
 transactionGraphToDot caption g = graphToDot params g' where
   g' :: Gr Text Text
-  g' = first nodeLabel $ foldr dropNode g (filter ((> 4) . nodeType) $ map fst $ labNodes g)
+  g' = first nodeLabel
+       $ foldr dropNode g (filter ((> TransactionOutputToWallet) . nodeType) $ map fst $ labNodes g)
   -- drop script and wallet nodes
   dropNode :: Int -> Gr a b -> Gr a b
   dropNode n gr = snd (match n gr)
@@ -73,27 +87,25 @@ transactionGraphToDot caption g = graphToDot params g' where
     fmtNode = \ (n, l) -> toLabel l : if isTransaction n then [Shape DoubleOctagon] else [],
     -- give wallet inputs weight 0 to move wallet clusters below transaction
     fmtEdge = \ (src, dest, l) ->
-      toLabel l : if isTransaction dest && nodeType src == 3 then [Weight $ Int 0] else []}
+      toLabel l
+      : if isTransaction dest && nodeType src == TransactionInputFromWallet then [Weight $ Int 0] else []}
   clustering :: (Int, Text) -> NodeCluster Int (Int, Text)
   clustering (n, name)
     | (Just (ins, node, _, _outs), _) <- match n g, let noCluster = N (n, name) =
       case nodeType n of
-        -- inputs from scripts
-        1 | [(_, script)] <- nub $ filter notToTransaction ins -> C script noCluster
-        -- outputs from scripts
-        2 | [(_, script)] <- nub $ filter notToTransaction ins -> C script noCluster
-        -- inputs from wallets
-        3 | [(_, wallet)] <- ins -> C wallet noCluster
-        -- outputs from wallets
-        4 | [(_, wallet)] <- filter notToTransaction ins -> C wallet noCluster
-        -- scripts
-        5 -> C n noCluster
-        -- wallets
-        6 -> C n noCluster
-        -- transactions
-        _ -> noCluster
+        TransactionInputFromScript
+          | [(_, script)] <- nub $ filter notToTransaction ins -> C script noCluster
+        TransactionOutputToScript
+          | [(_, script)] <- nub $ filter notToTransaction ins -> C script noCluster
+        TransactionInputFromWallet
+          | [(_, wallet)] <- ins -> C wallet noCluster
+        TransactionOutputToWallet
+          | [(_, wallet)] <- filter notToTransaction ins -> C wallet noCluster
+        ScriptAddress -> C n noCluster
+        WalletAddress -> C n noCluster
+        Transaction -> noCluster
   notToTransaction :: (Text, Int) -> Bool
-  notToTransaction = not . isTransaction . snd
+  notToTransaction = (/= Transaction) . nodeType . snd
 
 data OverlayMode = Distinct | Parallel | Serial deriving (Eq, Ord, Show)
 
@@ -130,11 +142,12 @@ replaceFixedNodes mode total g =
         switchNode n = IntMap.findWithDefault n n nodeMap
         nodeIdMap :: Map NodeId Int
         nodeIdMap = case mode of
-          Parallel -> foldMap nodeMapOfType [1..6]
-          _ -> foldMap nodeMapOfType [5..6]
-        nodeMapOfType :: Int -> Map NodeId Int
-        nodeMapOfType n = Map.fromList (zip (nodesOfType n g) $ (7*total+) <$> [n, n+7 ..])
-        nodesOfType :: Int -> Gr NodeId Text -> [NodeId]
+          Parallel -> foldMap nodeMapOfType [TransactionInputFromScript .. WalletAddress]
+          _ -> foldMap nodeMapOfType [ScriptAddress, WalletAddress]
+        nodeMapOfType :: NodeType -> Map NodeId Int
+        nodeMapOfType n =
+          Map.fromList (zip (nodesOfType n g) $ (nodeTypeRange*total+) <$> [fromEnum n, fromEnum n + nodeTypeRange ..])
+        nodesOfType :: NodeType -> Gr NodeId Text -> [NodeId]
         nodesOfType t g = snd <$> filter ((t ==) . nodeType . fst) (labNodes g)
         nodeMap :: IntMap Int
         nodeMap = case mode of
@@ -144,20 +157,20 @@ replaceFixedNodes mode total g =
         targetNode (n, node) = (,) n <$> Map.lookup node nodeIdMap
         targetUTxO :: (Int, NodeId) -> Maybe (Int, Int)
         targetUTxO (n, node)
-          | nodeType n `elem` [1, 3], -- input UTxOs
+          | nodeType n `elem` [TransactionInputFromScript, TransactionInputFromWallet], -- input UTxOs
             (Just ([(_, address)], _, _, [(_, trans)]), _) <- match n g', -- address and transaction consuming the UTxO
             (Just ([], _, _, utxos), _) <- match address g', -- all UTxOs at the address
             (_, n'):_ <- reverse
                          $ filter (matchingOutput n node address trans . snd)
                          $ takeWhile ((< n) . snd) $ sortOn snd utxos
           = Just (n, n')
-          | nodeType n `elem` [5, 6] = (,) n <$> Map.lookup node nodeIdMap
+          | nodeType n `elem` [ScriptAddress, WalletAddress] = (,) n <$> Map.lookup node nodeIdMap
           | otherwise = Nothing
         -- | given an input UTxO, its address, transaction consuming it, and another UTxO,
         -- decide if the latter UTxO can serve as the former
         matchingOutput :: Int -> NodeId -> Int -> Int -> Int -> Bool
         matchingOutput n inputNode address trans n'
-          | nodeType n' `elem` [2, 4],
+          | nodeType n' `elem` [TransactionOutputToScript, TransactionOutputToWallet],
             (Just (ins, _, outputNode, []), _) <- match n' g',
             [(_, trans')] <- filter ((< address) . snd) ins
           = inputNode == outputNode && trans' < trans
@@ -192,22 +205,23 @@ transactionTypeGraph
        <> [ (walletNode, n, "")
           | (n, WalletUTxO name _) <- iwNodes <> owNodes,
             let [(walletNode, _)] = filter ((WalletNamed name ==) . snd) walletNodes]
-  transactionNode = 7*startIndex
+  transactionNode = nodeTypeRange*startIndex
   isNodes =
-    [ (7*n+1, ScriptUTxO fromScript datum currencies)
+    [ (nodeTypeRange*n+1, ScriptUTxO fromScript datum currencies)
     | (n, (name, InputFromScript {fromScript, datum, currencies})) <- zip [startIndex..] $ Map.toList scriptInputs]
   osNodes =
-    [ (7*n+2, ScriptUTxO toScript datum currencies)
+    [ (nodeTypeRange*n+2, ScriptUTxO toScript datum currencies)
     | (n, (name, OutputToScript {toScript, datum, currencies})) <- zip [startIndex..] $ Map.toList scriptOutputs]
   iwNodes =
-    [ (7*n+3, WalletUTxO walletName currencies)
+    [ (nodeTypeRange*n+3, WalletUTxO walletName currencies)
     | (n, (name, Wallet {walletName, currencies})) <- zip [startIndex..] $ Map.toList walletInputs]
   owNodes =
-    [ (7*n+4, WalletUTxO walletName currencies)
+    [ (nodeTypeRange*n+4, WalletUTxO walletName currencies)
     | (n, (name, Wallet {walletName, currencies})) <- zip [startIndex..] $ Map.toList walletOutputs]
   scriptNodes =
-    [ (7*n+5, ScriptNamed name)
-    | (n, name) <- zip [startIndex..] $ nub $ map snd $ Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs)) ]
+    [ (nodeTypeRange*n+5, ScriptNamed name)
+    | (n, name) <- zip [startIndex..] $ nub $ map snd
+      $ Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs)) ]
   walletNodes =
-    [ (7*n+6, WalletNamed name)
+    [ (nodeTypeRange*n+6, WalletNamed name)
     | (n, name) <- zip [startIndex..] $ nub $ map snd $ Map.toList (walletName <$> walletInputs <> walletOutputs) ]
