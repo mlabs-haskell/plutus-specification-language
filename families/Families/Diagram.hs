@@ -3,7 +3,6 @@
 module Families.Diagram where
 
 import Families (Transaction)
-import HKD
 import Control.Arrow ((&&&))
 import Data.Bifunctor (first, second)
 import Data.Kind (Type)
