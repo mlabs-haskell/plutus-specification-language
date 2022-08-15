@@ -32,7 +32,7 @@ import GHC.Stack (HasCallStack)
 import Language.Haskell.TH qualified as TH
 import Language.Haskell.TH.Syntax (liftTyped)
 
-type TypeReifier a = TH.Name -> TH.Name -> [TH.Name] -> TH.Type -> Maybe (TH.Code TH.Q a)
+type TypeReifier a = TH.Name -> TH.Name -> [(TH.Name, Maybe TH.Type)] -> TH.Type -> Maybe (TH.Code TH.Q a)
 
 untypedDiagramForTransactionType :: TH.Type -> TH.Q TH.Exp
 untypedDiagramForTransactionType = TH.unTypeCode . diagramForTransactionType
@@ -60,8 +60,9 @@ diagramForTransactionType t = TH.Code $ do
 reifyMapField :: forall a. TH.Type -> TH.Name -> TypeReifier a -> TH.Code TH.Q [(Text, a)]
 reifyMapField t assocTypeName reifyType = TH.Code $ do
   let description = TH.pprint assocTypeName <> " '" <> TH.pprint t
+      (_, typeArgs) = typeNameAndArgs t
   typeName <- TH.reifyInstances assocTypeName [t] >>= \case
-    [TH.TySynInstD (TH.TySynEqn _ _ t')] -> pure (typeName t')
+    [TH.TySynInstD (TH.TySynEqn _ _ t')] -> pure (fst $ typeNameAndArgs t')
     [d] -> ''Transaction <$ TH.reportError ("Weird instance " <> description <> ": " <> show d)
     [] -> ''Transaction <$ TH.reportError ("Missing instance " <> description)
     _ -> ''Transaction <$ TH.reportError ("Multiple instances " <> description)
@@ -81,9 +82,12 @@ reifyMapField t assocTypeName reifyType = TH.Code $ do
     _ -> [] <$ TH.reportError ("Multiple data " <> TH.pprint tyConName <> " constructors")
   let reifyField :: TH.VarBangType -> Maybe (TH.Q (TH.TExp (Text, a)))
       reifyField (name, _, fieldType) =
-        TH.examineCode . (flip TH.bindCode $ addName name) . TH.examineCode <$> reifyType scriptVar walletVar rest fieldType
+        TH.examineCode . (flip TH.bindCode $ addName name) . TH.examineCode
+        <$> reifyType scriptVar walletVar varBindings fieldType
       addName :: TH.Name -> TH.TExp a -> TH.Code TH.Q (Text, a) 
       addName name a = [|| (Text.pack $$(stringLiteral $ TH.nameBase name), $$(TH.Code $ pure a)) ||]
+      varBindings :: [(TH.Name, Maybe TH.Type)]
+      varBindings = zip rest (map Just typeArgs <> repeat Nothing)
   sequenceExps $ sequenceA $ mapMaybe reifyField fields
 
 reifyScriptInput :: HasCallStack => TypeReifier InputFromScript
@@ -118,30 +122,41 @@ reifyScriptOutput scriptVar _walletVar vars
     ||]
 reifyScriptOutput _ _ _ _ = Nothing
 
-currencyDescriptions :: HasCallStack => [TH.Name] -> TH.Type -> TH.Code TH.Q [Currency]
+currencyDescriptions :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q [Currency]
 currencyDescriptions vars =
   TH.unsafeCodeCoerce . pure . TH.ListE . map (TH.LitE . TH.StringL . Text.unpack) . typeDescriptions vars
 
-typeDescriptions :: HasCallStack => [TH.Name] -> TH.Type -> [Text]
+typeDescriptions :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> [Text]
 typeDescriptions vars (TH.AppT (TH.AppT TH.PromotedConsT t) ts) = typeDescription vars t : typeDescriptions vars ts
 typeDescriptions vars TH.PromotedNilT = []
 typeDescriptions vars (TH.SigT t _) = typeDescriptions vars t
 
-typeDescription :: HasCallStack => [TH.Name] -> TH.Type -> Text
+typeDescription :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> Text
 typeDescription _ (TH.PromotedT name) = Text.pack (TH.nameBase name)
 typeDescription _ (TH.LitT (TH.NumTyLit n)) = Text.pack (show n)
 typeDescription _ t@TH.PromotedTupleT{} = Text.pack (dropWhile (== '\'') $ TH.pprint t)
 typeDescription vars (TH.AppT t (TH.VarT v)) =
-  typeDescription vars t <> foldMap ((" " <>) . Text.pack . show . succ) (elemIndex v vars)
+  typeDescription vars t
+  <> case lookupIndex v vars of
+       Nothing -> ""
+       Just (Nothing, i) -> " " <> Text.pack (show $ succ i)
+       Just (Just t@TH.LitT{}, _) -> " " <> Text.pack (TH.pprint t)
+       Just (Just t, _) -> error ("Can't describe variable type " <> TH.pprint t)
 typeDescription vars (TH.AppT a b) = typeDescription vars a <> " " <> typeDescription vars b
 typeDescription vars (TH.SigT t _) = typeDescription vars t
 typeDescription _ t = error ("Can't describe type " <> TH.pprint t)
 
-typeName :: TH.Type -> TH.Name
-typeName (TH.ConT name) = name
-typeName (TH.AppT t TH.VarT{}) = typeName t
-typeName (TH.SigT t _) = typeName t
-typeName t = error (TH.pprint t <> " is not a named type.")
+lookupIndex :: Eq k => k -> [(k, v)] -> Maybe (v, Int)
+lookupIndex k = foldr f Nothing where
+  f (k', v) | k == k' = const $ Just (v, 0)
+            | otherwise = ((succ <$>) <$>)
+
+typeNameAndArgs :: TH.Type -> (TH.Name, [TH.Type])
+typeNameAndArgs (TH.ConT name) = (name, [])
+typeNameAndArgs (TH.PromotedT name) = (name, [])
+typeNameAndArgs (TH.AppT t t') = (<> [t']) <$> typeNameAndArgs t
+typeNameAndArgs (TH.SigT t _) = typeNameAndArgs t
+typeNameAndArgs t = error (TH.pprint t <> " is not a named type.")
 
 stringLiteral :: String -> TH.Code TH.Q String
 stringLiteral = TH.unsafeCodeCoerce . pure . TH.LitE . TH.StringL
