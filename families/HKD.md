@@ -52,7 +52,7 @@ type InputWallet :: c -> (forall s -> Redeemer s -> Datum s -> Type) -> (c -> Ty
 data InputWallet c s w
 ~~~
 
-The core project-specific datum and redeemer types don't change, nor do the `instance ValidatorScript` declarations.
+The core `data TransactionFamily` and `instance ValidatorScript` declarations remain unchanged.
 
 <!--
 ~~~ {.haskell}

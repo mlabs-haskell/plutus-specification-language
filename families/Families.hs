@@ -15,7 +15,7 @@ import Ledger (PubKey, Signature, SlotRange)
 class ValidatorScript s where
   type Currencies s :: [k]
   type Datum s    :: Type
-  type Redeemer s = (r :: Type) | r -> s
+  type Redeemer s :: Type
 
 type DatumSpecimen :: forall script -> Datum script -> Type
 type family DatumSpecimen s :: Datum s -> Type
