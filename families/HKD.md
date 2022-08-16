@@ -5,7 +5,8 @@
 {-# LANGUAGE DataKinds, DuplicateRecordFields, GADTs, FlexibleInstances, OverloadedStrings,
              KindSignatures, StandaloneKindSignatures,
              MultiParamTypeClasses, NoStarIsType, NumericUnderscores,
-             PolyKinds, RankNTypes, TypeApplications, TypeFamilies, TypeOperators #-}
+             PolyKinds, RankNTypes, TypeApplications, TypeFamilies, TypeOperators,
+             UndecidableInstances #-}
 
 module HKD where
 
@@ -176,6 +177,13 @@ type family NatMap xs where
 These type definitions can be used to generate concrete transactions as in the following example:
 
 ~~~ {.haskell}
+type instance RedeemerSpecimen 'CentralExchange = Const ()
+type instance RedeemerSpecimen ('Oracle n) = OracleRedeemerSpecimen n
+
+data OracleRedeemerSpecimen n r where
+  DoTrade :: OracleRedeemerSpecimen n 'Trade
+  DoUpdate :: OracleRedeemerSpecimen n 'Update
+
 exampleExchangeTransaction :: TxSpecimen ('Exchange 1 2)
 exampleExchangeTransaction = TxSpecimen {
   txInputs = ExchangeInputs {
@@ -201,7 +209,7 @@ exampleExchangeInput = TxInputSpecimen {
   txInputOut = TxOutSpecimen {
     txOutDatum = (),
     txOutValue = Value Destitute},
-  txInputRedeemer = ()}
+  txInputRedeemer = Const ()}
   
 exampleExchangeOutput :: TxOutSpecimen 'CentralExchange ['Token 1, 'Token 2]
 exampleExchangeOutput = TxOutSpecimen {
@@ -216,7 +224,7 @@ exampleOracle1Input = TxInputSpecimen {
       maxTradeVolume = 5_000,
       expiry = 20_000_000},
     txOutValue = Value (1 :$ Proxy @('Token 1))},
-  txInputRedeemer = Trade}
+  txInputRedeemer = DoTrade}
 
 exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Trade '[ 'Token 2 ]
 exampleOracle2Input = TxInputSpecimen {
@@ -226,7 +234,7 @@ exampleOracle2Input = TxInputSpecimen {
       maxTradeVolume = 10_000,
       expiry = 20_000_000},
     txOutValue = Value (1 :$ Proxy @('Token 2))},
-  txInputRedeemer = Trade}
+  txInputRedeemer = DoTrade}
 
 exampleOracle1Output :: TxOutSpecimen ('Oracle 1) '[ 'Token 1 ]
 exampleOracle1Output = TxOutSpecimen {
