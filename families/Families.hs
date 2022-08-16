@@ -17,6 +17,9 @@ class ValidatorScript s where
   type Datum s    :: Type
   type Redeemer s = (r :: Type) | r -> s
 
+type RedeemerSpecimen :: forall script -> Redeemer script -> Type
+type family RedeemerSpecimen s :: Redeemer s -> Type
+
 type DApp :: fam -> Type
 type family DApp t
 
@@ -41,7 +44,7 @@ data TxSpecimen t = TxSpecimen {
 type TxInputSpecimen :: forall (s :: script) -> Redeemer s -> [currency] -> Type
 data TxInputSpecimen s r e = TxInputSpecimen {
   txInputOut      :: TxOutSpecimen s e,
-  txInputRedeemer :: Redeemer s}
+  txInputRedeemer :: RedeemerSpecimen s r}
 
 data TxMintSpecimen e = TxMintSpecimen {
   txMintValue :: Value e}
