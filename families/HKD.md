@@ -73,10 +73,10 @@ instance ValidatorScript ('Oracle n) where
   type Currencies ('Oracle n) = '[ 'Token n ]
   type Datum ('Oracle n) = OracleDatum
   type Redeemer ('Oracle n) = OracleRedeemer n
-instance ValidatorScript CentralExchange where
-  type Currencies CentralExchange = '[ 'Ada ]
-  type Datum CentralExchange = ()
-  type Redeemer CentralExchange = ()
+instance ValidatorScript 'CentralExchange where
+  type Currencies 'CentralExchange = '[ 'Ada ]
+  type Datum 'CentralExchange = ()
+  type Redeemer 'CentralExchange = ()
 ~~~
 -->
 
