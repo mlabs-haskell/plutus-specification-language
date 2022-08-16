@@ -4,7 +4,7 @@
 <!--
 ~~~ {.haskell}
 {-# LANGUAGE DataKinds, ExplicitForAll, KindSignatures, StandaloneKindSignatures,
-             MultiParamTypeClasses, PolyKinds, TypeFamilies, TypeOperators #-}
+             MultiParamTypeClasses, PolyKinds, RankNTypes, TypeFamilies, TypeOperators #-}
 
 module NFT where
 
@@ -42,8 +42,9 @@ instance ValidatorScript CentralExchange where
 type instance DApp 'Initialize = MyDApp
 type instance Economy 'Initialize = Token
 
+type InititalizeOutputs :: (forall (s :: MyDApp) -> Datum s -> [Token] -> Type) -> (c -> Type) -> Type
 data InititalizeOutputs s w = InititalizeOutputs {
-  exchange :: s 'CentralExchange '[ 'AuthNFT ]}
+  exchange :: s 'CentralExchange '() '[ 'AuthNFT ]}
 instance Transaction 'Initialize where
   type Inputs 'Initialize = InputWallet '[ 'ScriptAda ]
   type Outputs 'Initialize = InititalizeOutputs

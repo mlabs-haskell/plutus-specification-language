@@ -17,6 +17,9 @@ class ValidatorScript s where
   type Datum s    :: Type
   type Redeemer s = (r :: Type) | r -> s
 
+type DatumSpecimen :: forall script -> Datum script -> Type
+type family DatumSpecimen s :: Datum s -> Type
+
 type RedeemerSpecimen :: forall script -> Redeemer script -> Type
 type family RedeemerSpecimen s :: Redeemer s -> Type
 
@@ -27,9 +30,13 @@ type Economy :: fam -> Type
 type family Economy t
 
 class Transaction (t :: familie) where
-  type Inputs t  :: (forall (s :: DApp t) -> Redeemer s -> [Economy t] -> Type) -> ([Economy t] -> Type) -> Type
+  type Inputs t  :: (forall (s :: DApp t) -> Redeemer s -> Datum s -> [Economy t] -> Type)
+                 -> ([Economy t] -> Type)
+                 -> Type
   type Mints t   :: ([Economy t] -> Type) -> Type
-  type Outputs t :: (DApp t -> [Economy t] -> Type) -> ([Economy t] -> Type) -> Type
+  type Outputs t :: (forall (s :: DApp t) -> Datum s -> [Economy t] -> Type)
+                 -> ([Economy t] -> Type)
+                 -> Type
   type Mints t = Const ()
 
 data TxSpecimen t = TxSpecimen {
@@ -41,9 +48,9 @@ data TxSpecimen t = TxSpecimen {
   txFee :: Value '[ 'Ada ],
   txSignatures :: Map PubKey Signature}
 
-type TxInputSpecimen :: forall (s :: script) -> Redeemer s -> [currency] -> Type
-data TxInputSpecimen s r e = TxInputSpecimen {
-  txInputOut      :: TxOutSpecimen s e,
+type TxInputSpecimen :: forall (s :: script) -> Redeemer s -> Datum s -> [currency] -> Type
+data TxInputSpecimen s r d e = TxInputSpecimen {
+  txInputOut      :: TxOutSpecimen s d e,
   txInputRedeemer :: RedeemerSpecimen s r}
 
 data TxMintSpecimen e = TxMintSpecimen {
@@ -52,8 +59,9 @@ data TxMintSpecimen e = TxMintSpecimen {
 data WalletSpecimen e = WalletSpecimen {
   walletPubKey :: PubKey}
 
-data TxOutSpecimen s e = TxOutSpecimen {
-  txOutDatum :: Datum s,
+type TxOutSpecimen :: forall (s :: script) -> Datum s -> [currency] -> Type
+data TxOutSpecimen s d e = TxOutSpecimen {
+  txOutDatum :: DatumSpecimen s d,
   txOutValue :: Value e}
 
 type Value :: [currency] -> Type
@@ -75,5 +83,5 @@ data Collateral = CollateralAda
 type Wallet :: c -> k -> (c -> Type) -> Type
 data Wallet c s w
 
-type InputWallet :: c -> (forall s -> Redeemer s -> c -> Type) -> (c -> Type) -> Type
+type InputWallet :: c -> (forall s -> Redeemer s -> Datum s -> c -> Type) -> (c -> Type) -> Type
 data InputWallet c s w
