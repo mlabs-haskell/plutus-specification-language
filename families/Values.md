@@ -73,10 +73,10 @@ data TxSpecimen t = TxSpecimen {
 type TxInputSpecimen :: forall (s :: script) -> Redeemer s -> Datum s -> [currency] -> Type
 data TxInputSpecimen s r d e = TxInputSpecimen {
   txInputOut      :: TxOutSpecimen s d e,
-  txInputRedeemer :: Redeemer s}
+  txInputRedeemer :: RedeemerSpecimen s r}
 
-data TxMintSpecimen c = TxMintSpecimen {
-  txMintValue :: Value c}
+data TxMintSpecimen e = TxMintSpecimen {
+  txMintValue :: Value e}
 
 data WalletSpecimen e = WalletSpecimen {
   walletPubKey :: PubKey}
@@ -87,12 +87,13 @@ data TxOutSpecimen s d e = TxOutSpecimen {
   txOutValue :: Value e}
 
 type Value :: [currency] -> Type
-data Value currencies = Value (NatMap currencies)
+data Value currencies = Value (AmountsOf currencies)
 
-type NatMap :: [t] -> Type
-type family NatMap xs where
-  NatMap '[] = ()
-  NatMap (x ': xs) = (Natural, NatMap xs)
+type AmountsOf :: [c] -> Type
+data AmountsOf currencies where
+  Destitute :: AmountsOf '[]
+  (:$) :: Natural -> Proxy c -> AmountsOf '[c]
+  (:+) :: AmountsOf '[c] -> AmountsOf cs -> AmountsOf (c ': cs)
 ~~~
 
 With all these types in place, we can generate concrete transactions as in the following example:
