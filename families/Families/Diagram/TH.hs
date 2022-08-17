@@ -94,12 +94,18 @@ reifyScriptInput :: HasCallStack => TypeReifier InputFromScript
 reifyScriptInput scriptVar _walletVar vars
   (TH.AppT
     (TH.AppT
-      (TH.AppT (TH.VarT s) scriptType)
-      redeemerType)
+      (TH.AppT
+        (TH.AppT (TH.VarT s) scriptType)
+        redeemerType)
+      datumType)
     currencies)
   | s == scriptVar = Just
     [||
-      InputFromScript $$(textLiteral $ typeDescription vars scriptType) $$(textLiteral $ typeDescription vars redeemerType) mempty $$(currencyDescriptions vars currencies)
+      InputFromScript
+        $$(textLiteral $ typeDescription vars scriptType)
+        $$(textLiteral $ typeDescription vars redeemerType)
+        $$(textLiteral $ typeDescription vars datumType)
+        $$(currencyDescriptions vars currencies)
     ||]
 reifyScriptInput _ _ _ _ = Nothing
 
@@ -114,11 +120,16 @@ reifyWallet _ _ _ _ = Nothing
 reifyScriptOutput :: HasCallStack => TypeReifier OutputToScript
 reifyScriptOutput scriptVar _walletVar vars
   (TH.AppT
-    (TH.AppT (TH.VarT s) scriptType)
+    (TH.AppT
+     (TH.AppT (TH.VarT s) scriptType)
+     datumType)
     currencies)
   | s == scriptVar = Just
     [||
-      OutputToScript $$(textLiteral $ typeDescription vars scriptType) mempty $$(currencyDescriptions vars currencies)
+      OutputToScript
+        $$(textLiteral $ typeDescription vars scriptType)
+        $$(textLiteral $ typeDescription vars datumType)
+        $$(currencyDescriptions vars currencies)
     ||]
 reifyScriptOutput _ _ _ _ = Nothing
 
