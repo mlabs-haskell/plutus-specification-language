@@ -125,9 +125,6 @@ data DrainOutputs s w = DrainOutputs {
 instance Transaction 'DrainCollectedFees where
   type Inputs 'DrainCollectedFees = DrainInputs
   type Outputs 'DrainCollectedFees = DrainOutputs
-
-minAda :: AmountsOf '[ 'ScriptAda ]
-minAda = 2_000_000 :$ Proxy @'ScriptAda
 ~~~
 
 ## Graphing the transaction diagram
