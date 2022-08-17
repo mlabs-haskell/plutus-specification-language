@@ -31,7 +31,7 @@ executable diagram
 
 executable indigo
   main-is:            IndigoDiagrams.hs
-  other-modules:      Families, Families.Diagram, Families.Diagram.TH, Ledger, IndigoLite
+  other-modules:      Families, Families.Diagram, Families.Diagram.TH, Ledger, IndigoLite, IndigoValues
   ghc-options:        -main-is IndigoDiagrams
   build-depends:      base, bytestring, containers, text, template-haskell >= 2.18, fgl, graphviz >= 2999.10
   default-language:   Haskell2010
