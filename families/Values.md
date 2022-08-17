@@ -18,6 +18,7 @@ import Data.Proxy (Proxy (Proxy))
 import Numeric.Natural (Natural)
 
 import Families
+import FamilyValues
 import Ledger (POSIXTime (POSIXTime), PubKey, always)
 ~~~
 -->
