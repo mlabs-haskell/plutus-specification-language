@@ -6,7 +6,7 @@ module Diagram where
 
 import Control.Concurrent (forkIO)
 import qualified Data.Map as Map
-import Families.Diagram (
+import Family.Diagram (
   TransactionTypeDiagram (
     TransactionTypeDiagram, transactionName, scriptInputs, scriptOutputs, walletInputs, walletOutputs),
   InputFromScript (InputFromScript, currencies, datum, redeemer, fromScript),
@@ -18,7 +18,7 @@ import Data.GraphViz (
   GraphvizCanvas (Xlib), GraphvizOutput (Canon, DotOutput),
   runGraphviz, runGraphvizCanvas')
 import qualified Language.Haskell.TH as TH
-import Families.Diagram.TH (diagramForTransactionType, untypedDiagramForTransactionType)
+import Family.Diagram.TH (diagramForTransactionType, untypedDiagramForTransactionType)
 import qualified HKD
 
 u1 = $( [t| 'HKD.UpdateOracle 1 |] >>= untypedDiagramForTransactionType)
