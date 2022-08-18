@@ -120,7 +120,7 @@ nodeLabel :: NodeId -> Text
 nodeLabel (ScriptNamed name) = name
 nodeLabel (WalletNamed name) = name
 nodeLabel (TransactionNamed name) = name
-nodeLabel ScriptUTxO {currencies} = Text.intercalate ", " (currencyName <$> currencies)
+nodeLabel ScriptUTxO {datum, currencies} = Text.intercalate ", " (currencyName <$> currencies) <> "\n<" <> datum <> ">"
 nodeLabel (WalletUTxO _ currencies) = Text.intercalate ", " (currencyName <$> currencies)
 
 transactionTypeFamilyGraph :: OverlayMode -> [TransactionTypeDiagram] -> Gr NodeId Text
