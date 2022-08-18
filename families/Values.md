@@ -17,7 +17,7 @@ import qualified Data.Map as Map
 import Data.Proxy (Proxy (Proxy))
 import Numeric.Natural (Natural)
 
-import Families
+import Family
 import FamilyValues
 import Ledger (POSIXTime (POSIXTime), PubKey, always)
 ~~~

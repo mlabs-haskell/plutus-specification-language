@@ -12,7 +12,7 @@ import Data.Functor.Const (Const)
 import Data.Kind (Type)
 import Data.Map (Map)
 import Numeric.Natural (Natural)
-import Families
+import Family
 
 data POSIXTime
 ~~~
