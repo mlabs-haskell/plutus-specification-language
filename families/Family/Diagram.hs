@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns, DuplicateRecordFields, GeneralizedNewtypeDeriving, NamedFieldPuns, OverloadedStrings #-}
 
-module Families.Diagram where
+module Family.Diagram where
 
 import Family (Transaction)
 import Control.Arrow ((&&&))
