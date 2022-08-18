@@ -2,7 +2,7 @@
 
 module Families.Diagram where
 
-import Families (Transaction)
+import Family (Transaction)
 import Control.Arrow ((&&&))
 import Data.Bifunctor (first, second)
 import Data.Kind (Type)

@@ -13,7 +13,7 @@
 
 module Families.Diagram.TH (diagramForTransactionType, untypedDiagramForTransactionType) where
 
-import Families (Transaction (Inputs, Mints, Outputs))
+import Family (Transaction (Inputs, Mints, Outputs))
 import Families.Diagram qualified as D
 import Families.Diagram (
   TransactionTypeDiagram (..),
