@@ -11,11 +11,11 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language TemplateHaskell #-}
 
-module Families.Diagram.TH (diagramForTransactionType, untypedDiagramForTransactionType) where
+module Family.Diagram.TH (diagramForTransactionType, untypedDiagramForTransactionType) where
 
 import Family (Transaction (Inputs, Mints, Outputs))
-import Families.Diagram qualified as D
-import Families.Diagram (
+import Family.Diagram qualified as D
+import Family.Diagram (
   TransactionTypeDiagram (..),
   InputFromScript (..),
   OutputToScript (..),
