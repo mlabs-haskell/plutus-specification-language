@@ -31,7 +31,7 @@ executable diagram
 
 executable indigo
   main-is:            IndigoDiagrams.hs
-  other-modules:      Family, FamilyValues, Family.Diagram, Family.Diagram.TH, Ledger, IndigoLite, IndigoValues
+  other-modules:      Family, Family.Values, Family.Diagram, Family.Diagram.TH, Ledger, IndigoLite, IndigoValues
   ghc-options:        -main-is IndigoDiagrams
   build-depends:      base, bytestring, containers, text, template-haskell >= 2.18, fgl, graphviz >= 2999.10
   default-language:   Haskell2010
@@ -39,7 +39,7 @@ executable indigo
 test-suite doc
   type:               exitcode-stdio-1.0
   main-is:            TransactionFamily.lhs
-  other-modules:      Family, FamilyValues, Family.Diagram, Family.Diagram.TH, Ledger, Typed, HKD, NFT, Diagram, Values
+  other-modules:      Family, Family.Values, Family.Diagram, Family.Diagram.TH, Ledger, Typed, HKD, NFT, Diagram, Values
   ghc-options:        -pgmL markdown-unlit
   build-depends:      base, bytestring, containers, text, template-haskell >= 2.18, fgl, graphviz >= 2999.10
   build-tool-depends: markdown-unlit:markdown-unlit
