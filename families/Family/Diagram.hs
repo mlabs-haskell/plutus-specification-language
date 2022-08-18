@@ -17,7 +17,7 @@ import Data.Ord (Down (Down))
 import Data.String (IsString)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Graph.Inductive (Context, Gr, empty, gmap, labEdges, labNodes, match, mkGraph)
+import Data.Graph.Inductive (Context, Gr, empty, gmap, lab, labEdges, labNodes, match, mkGraph)
 import Data.GraphViz (
   DotGraph, GraphvizCanvas (Xlib), GraphvizOutput (Canon, DotOutput),
   GlobalAttributes (GraphAttrs),
@@ -82,8 +82,8 @@ transactionGraphToDot caption g = graphToDot params g' where
     globalAttributes = [GraphAttrs [toLabel caption]],
     clusterID = Num . Int,
     clusterBy = clustering,
-    fmtCluster = \ n -> case match n g of
-      (Just (_, _, node, _), _) -> [GraphAttrs [toLabel $ nodeLabel node]],
+    fmtCluster = \ n -> case lab g n of
+      Just node -> [GraphAttrs [toLabel $ nodeLabel node]],
     fmtNode = \ (n, l) -> toLabel l : if isTransaction n then [Shape DoubleOctagon] else [],
     -- give wallet inputs weight 0 to move wallet clusters below transaction
     fmtEdge = \ (src, dest, l) ->
