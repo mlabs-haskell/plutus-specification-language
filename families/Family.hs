@@ -3,7 +3,7 @@
              TypeFamilies, TypeFamilyDependencies, TypeOperators,
              UndecidableInstances #-}
 
-module Families where
+module Family where
 
 import Data.Functor.Const (Const)
 import Data.Kind (Type)
