@@ -60,6 +60,7 @@ library
 
   exposed-modules:
     PSL
+    MonoidDo
 
   build-depends:
     , base
