@@ -91,19 +91,17 @@ transactionGraphToDot caption g = graphToDot params g' where
       : if isTransaction dest && nodeType src == TransactionInputFromWallet then [Weight $ Int 0] else []}
   clustering :: (Int, Text) -> NodeCluster Int (Int, Text)
   clustering (n, name)
-    | (Just (ins, node, _, _outs), _) <- match n g, let noCluster = N (n, name) =
-      case nodeType n of
-        TransactionInputFromScript
-          | [(_, script)] <- nub $ filter notToTransaction ins -> C script noCluster
-        TransactionOutputToScript
-          | [(_, script)] <- nub $ filter notToTransaction ins -> C script noCluster
-        TransactionInputFromWallet
-          | [(_, wallet)] <- ins -> C wallet noCluster
-        TransactionOutputToWallet
-          | [(_, wallet)] <- filter notToTransaction ins -> C wallet noCluster
-        ScriptAddress -> C n noCluster
-        WalletAddress -> C n noCluster
-        Transaction -> noCluster
+    | (Just (ins, node, _, _outs), _) <- match n g,
+      let noCluster = N (n, name) =
+      case (nodeType n, nub $ filter notToTransaction ins) of
+        (TransactionInputFromScript, [(_, address)]) -> C address noCluster
+        (TransactionOutputToScript, [(_, address)]) -> C address noCluster
+        (TransactionInputFromWallet, [(_, address)]) -> C address noCluster
+        (TransactionOutputToWallet, [(_, address)]) -> C address noCluster
+        (ScriptAddress, _) -> C n noCluster
+        (WalletAddress, _) -> C n noCluster
+        (Transaction, _) -> noCluster
+
   notToTransaction :: (Text, Int) -> Bool
   notToTransaction = (/= Transaction) . nodeType . snd
 
