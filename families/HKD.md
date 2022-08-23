@@ -32,6 +32,10 @@ class ValidatorScript s where
   type Datum s    :: Type
   type Redeemer s :: Type
 
+class MintingPolicyScript s where
+  type MintedToken s  :: Type
+  type MintRedeemer s :: Type
+
 type DApp :: fam -> Type
 type family DApp t
 
@@ -42,11 +46,14 @@ class Transaction (t :: familie) where
   type Inputs t  :: (forall (s :: DApp t) -> Redeemer s -> Datum s -> [Economy t] -> Type)
                  -> ([Economy t] -> Type)
                  -> Type
-  type Mints t   :: ([Economy t] -> Type) -> Type
+  type Mints t   :: (forall (mp :: DApp t) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
   type Outputs t :: (forall (s :: DApp t) -> Datum s -> [Economy t] -> Type)
                  -> ([Economy t] -> Type)
                  -> Type
-  type Mints t = Const ()
+  type Mints t = NoMints (DApp t)
+
+type NoMints :: forall k -> (forall (mp :: k) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
+data NoMints t mp = NoMints
 
 type Wallet :: c -> k -> (c -> Type) -> Type
 data Wallet c s w
