@@ -24,14 +24,18 @@ import Data.GraphViz (
   GraphvizParams(clusterBy, clusterID, fmtCluster, fmtEdge, fmtNode, globalAttributes, isDotCluster),
   NodeCluster (C, N), GraphID (Num), Number (Int),
   defaultParams, graphToDot, preview, runGraphviz, runGraphvizCanvas', toLabel)
-import Data.GraphViz.Attributes.Complete (Attribute (Shape, Weight), Shape (DoubleOctagon))
+import Data.GraphViz.Attributes (diamond)
+import Data.GraphViz.Attributes.Complete (
+  Attribute (ArrowHead, ArrowTail, Shape, Weight),
+  Shape (DoubleOctagon, InvTrapezium))
 
 data TransactionTypeDiagram = TransactionTypeDiagram {
   transactionName :: Text,
   scriptInputs :: Map Text InputFromScript,
   scriptOutputs :: Map Text OutputToScript,
   walletInputs :: Map Text Wallet,
-  walletOutputs :: Map Text Wallet}
+  walletOutputs :: Map Text Wallet,
+  mints :: Map Text MintOrBurn}
 
 data InputFromScript = InputFromScript {
   fromScript :: Text,
@@ -42,6 +46,11 @@ data InputFromScript = InputFromScript {
 data OutputToScript = OutputToScript {
   toScript :: Text,
   datum :: Text,
+  currencies :: [Currency]}
+
+data MintOrBurn = MintOrBurn {
+  mintingPolicy :: Text,
+  redeemer :: Text,
   currencies :: [Currency]}
 
 data Wallet = Wallet {
@@ -56,6 +65,7 @@ data NodeType =
   | TransactionOutputToScript
   | TransactionInputFromWallet
   | TransactionOutputToWallet
+  | MintingPolicy
   | ScriptAddress
   | WalletAddress
   deriving (Bounded, Enum, Eq, Ord, Show)
@@ -73,7 +83,7 @@ transactionGraphToDot :: Text -> Gr NodeId Text -> DotGraph Int
 transactionGraphToDot caption g = graphToDot params g' where
   g' :: Gr Text Text
   g' = first nodeLabel
-       $ foldr dropNode g (filter ((> TransactionOutputToWallet) . nodeType) $ map fst $ labNodes g)
+       $ foldr dropNode g (filter ((> MintingPolicy) . nodeType) $ map fst $ labNodes g)
   -- drop script and wallet nodes
   dropNode :: Int -> Gr a b -> Gr a b
   dropNode n gr = snd (match n gr)
@@ -84,42 +94,50 @@ transactionGraphToDot caption g = graphToDot params g' where
     clusterBy = clustering,
     fmtCluster = \ n -> case lab g n of
       Just node -> [GraphAttrs [toLabel $ nodeLabel node]],
-    fmtNode = \ (n, l) -> toLabel l : if isTransaction n then [Shape DoubleOctagon] else [],
+    fmtNode = \ (n, l) -> toLabel l : case nodeType n of
+        Transaction{} -> [Shape DoubleOctagon]
+        MintingPolicy{} -> [Shape InvTrapezium]
+        _ -> [],
     -- give wallet inputs weight 0 to move wallet clusters below transaction
     fmtEdge = \ (src, dest, l) ->
       toLabel l
-      : if isTransaction dest && nodeType src == TransactionInputFromWallet then [Weight $ Int 0] else []}
+      : if isTransaction dest && nodeType src == TransactionInputFromWallet then [Weight $ Int 0]
+        else if isTransaction src && nodeType dest == MintingPolicy then [ArrowHead diamond, ArrowTail diamond]
+        else []}
   clustering :: (Int, Text) -> NodeCluster Int (Int, Text)
   clustering (n, name)
     | (Just (ins, node, _, _outs), _) <- match n g,
       let noCluster = N (n, name) =
-      case (nodeType n, nub $ filter notToTransaction ins) of
+      case (nodeType n, nub $ filter (not . isTransaction . snd) ins) of
         (TransactionInputFromScript, [(_, address)]) -> C address noCluster
         (TransactionOutputToScript, [(_, address)]) -> C address noCluster
         (TransactionInputFromWallet, [(_, address)]) -> C address noCluster
         (TransactionOutputToWallet, [(_, address)]) -> C address noCluster
         (ScriptAddress, _) -> C n noCluster
         (WalletAddress, _) -> C n noCluster
+        (MintingPolicy, _) -> noCluster
         (Transaction, _) -> noCluster
-
-  notToTransaction :: (Text, Int) -> Bool
-  notToTransaction = (/= Transaction) . nodeType . snd
 
 data OverlayMode = Distinct | Parallel | Serial deriving (Eq, Ord, Show)
 
-data NodeId = ScriptNamed Text
+data NodeId = ValidatorScriptNamed Text
             | WalletNamed Text
+            | MintingPolicyNamed Text
             | TransactionNamed Text
             | ScriptUTxO {script :: Text, datum :: Text, currencies :: [Currency]}
             | WalletUTxO Text [Currency]
             deriving (Eq, Ord, Show)
 
 nodeLabel :: NodeId -> Text
-nodeLabel (ScriptNamed name) = name
+nodeLabel (MintingPolicyNamed name) = name
+nodeLabel (ValidatorScriptNamed name) = name
 nodeLabel (WalletNamed name) = name
 nodeLabel (TransactionNamed name) = name
-nodeLabel ScriptUTxO {datum, currencies} = Text.intercalate ", " (currencyName <$> currencies) <> "\n<" <> datum <> ">"
-nodeLabel (WalletUTxO _ currencies) = Text.intercalate ", " (currencyName <$> currencies)
+nodeLabel ScriptUTxO {datum, currencies} = currenciesLabel currencies <> "\n<" <> datum <> ">"
+nodeLabel (WalletUTxO _ currencies) = currenciesLabel currencies
+
+currenciesLabel :: [Currency] -> Text
+currenciesLabel = Text.intercalate ", " . map currencyName
 
 transactionTypeFamilyGraph :: OverlayMode -> [TransactionTypeDiagram] -> Gr NodeId Text
 transactionTypeFamilyGraph mode = mergeGraphs . foldl' addTx (0, []) where
@@ -141,7 +159,7 @@ replaceFixedNodes mode total g =
         nodeIdMap :: Map NodeId Int
         nodeIdMap = case mode of
           Parallel -> foldMap nodeMapOfType [TransactionInputFromScript .. WalletAddress]
-          _ -> foldMap nodeMapOfType [ScriptAddress, WalletAddress]
+          _ -> foldMap nodeMapOfType [MintingPolicy, ScriptAddress, WalletAddress]
         nodeMapOfType :: NodeType -> Map NodeId Int
         nodeMapOfType n =
           Map.fromList (zip (nodesOfType n g) $ (nodeTypeRange*total+) <$> [fromEnum n, fromEnum n + nodeTypeRange ..])
@@ -162,7 +180,7 @@ replaceFixedNodes mode total g =
                          $ filter (matchingOutput n node address trans . snd)
                          $ takeWhile ((< n) . snd) $ sortOn snd utxos
           = Just (n, n')
-          | nodeType n `elem` [ScriptAddress, WalletAddress] = (,) n <$> Map.lookup node nodeIdMap
+          | nodeType n `elem` [MintingPolicy, ScriptAddress, WalletAddress] = (,) n <$> Map.lookup node nodeIdMap
           | otherwise = Nothing
         -- | given an input UTxO, its address, transaction consuming it, and another UTxO,
         -- decide if the latter UTxO can serve as the former
@@ -180,11 +198,11 @@ gconcat = uncurry mkGraph . mconcat . map (labNodes &&& labEdges)
 transactionTypeGraph :: Int -> TransactionTypeDiagram -> Gr NodeId Text
 transactionTypeGraph
   startIndex
-  TransactionTypeDiagram{transactionName, scriptInputs, scriptOutputs, walletInputs, walletOutputs}
+  TransactionTypeDiagram{transactionName, scriptInputs, scriptOutputs, walletInputs, walletOutputs, mints}
   = mkGraph nodes (nub edges) where
   nodes =
     (transactionNode, TransactionNamed transactionName)
-    : (isNodes <> osNodes <> iwNodes <> owNodes <> scriptNodes <> walletNodes)
+    : (isNodes <> osNodes <> iwNodes <> owNodes <> mpNodes <> scriptNodes <> walletNodes)
   edges = [ (n, transactionNode, redeemer <> "@" <> name)
           | (name, InputFromScript{fromScript, redeemer, datum, currencies}) <- Map.toList scriptInputs,
             let [(n, _)] = filter ((ScriptUTxO fromScript datum currencies ==) . snd) isNodes]
@@ -197,9 +215,12 @@ transactionTypeGraph
        <> [ (transactionNode, n, name)
           | (name, Wallet w currencies) <- Map.toList walletOutputs,
             let [(n, _)] = filter ((WalletUTxO w currencies ==) . snd) owNodes]
+       <>  [ (transactionNode, n, redeemer <> " -> " <> currenciesLabel currencies)
+          | (name, MintOrBurn mp redeemer currencies) <- Map.toList mints,
+            let [(n, _)] = filter ((MintingPolicyNamed mp ==) . snd) mpNodes]
        <> [ (scriptNode, n, "")
           | (n, ScriptUTxO name _ _) <- isNodes <> osNodes,
-            let [(scriptNode, _)] = filter ((ScriptNamed name ==) . snd) scriptNodes]
+            let [(scriptNode, _)] = filter ((ValidatorScriptNamed name ==) . snd) scriptNodes]
        <> [ (walletNode, n, "")
           | (n, WalletUTxO name _) <- iwNodes <> owNodes,
             let [(walletNode, _)] = filter ((WalletNamed name ==) . snd) walletNodes]
@@ -216,10 +237,13 @@ transactionTypeGraph
   owNodes =
     [ (nodeTypeRange*n+4, WalletUTxO walletName currencies)
     | (n, (name, Wallet {walletName, currencies})) <- zip [startIndex..] $ Map.toList walletOutputs]
+  mpNodes =
+    [ (nodeTypeRange*n+5, MintingPolicyNamed name)
+    | (n, name) <- zip [startIndex..] $ nub $ mintingPolicy . snd <$> Map.toList mints ]
   scriptNodes =
-    [ (nodeTypeRange*n+5, ScriptNamed name)
+    [ (nodeTypeRange*n+6, ValidatorScriptNamed name)
     | (n, name) <- zip [startIndex..] $ nub $ map snd
       $ Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs)) ]
   walletNodes =
-    [ (nodeTypeRange*n+6, WalletNamed name)
+    [ (nodeTypeRange*n+7, WalletNamed name)
     | (n, name) <- zip [startIndex..] $ nub $ map snd $ Map.toList (walletName <$> walletInputs <> walletOutputs) ]
