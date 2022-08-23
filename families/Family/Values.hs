@@ -11,7 +11,7 @@ import Data.Map (Map)
 import Numeric.Natural (Natural)
 import Data.Proxy (Proxy)
 import Ledger (PubKey, Signature, SlotRange)
-import Family (Ada(Ada), Datum, Redeemer, Transaction(Inputs, Mints, Outputs))
+import Family (Ada(Ada), Datum, Redeemer, MintRedeemer, MintedToken, Transaction(Inputs, Mints, Outputs))
 
 type DatumSpecimen :: forall script -> Datum script -> Type
 type family DatumSpecimen s :: Datum s -> Type
@@ -33,7 +33,8 @@ data TxInputSpecimen s r d e = TxInputSpecimen {
   txInputOut      :: TxOutSpecimen s d e,
   txInputRedeemer :: RedeemerSpecimen s r}
 
-data TxMintSpecimen e = TxMintSpecimen {
+type TxMintSpecimen :: forall (mp :: policy) -> MintRedeemer mp -> [MintedToken mp] -> Type
+data TxMintSpecimen mp r e = TxMintSpecimen {
   txMintValue :: Value e}
 
 data WalletSpecimen e = WalletSpecimen {
