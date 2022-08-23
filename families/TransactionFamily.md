@@ -3,9 +3,10 @@
 ## Concepts and Terminology
 
 The usual Cardano/Plutus concepts presumably need no introduction:
-  * *Script*
-  * *UTxO*, or Unspent TransaXion Output
-  * *Transaction*
+
+* *Script*
+* *UTxO*, or Unspent TransaXion Output
+* *Transaction*
 
 <!--
 
