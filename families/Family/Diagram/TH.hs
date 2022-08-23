@@ -19,6 +19,7 @@ import Family.Diagram (
   TransactionTypeDiagram (..),
   InputFromScript (..),
   OutputToScript (..),
+  MintOrBurn (..),
   Wallet (..),
   Currency (..),
   )
@@ -32,7 +33,7 @@ import GHC.Stack (HasCallStack)
 import Language.Haskell.TH qualified as TH
 import Language.Haskell.TH.Syntax (liftTyped)
 
-type TypeReifier a = TH.Name -> TH.Name -> [(TH.Name, Maybe TH.Type)] -> TH.Type -> Maybe (TH.Code TH.Q a)
+type TypeReifier a = [(TH.Name, Maybe TH.Type)] -> TH.Type -> Maybe (TH.Code TH.Q a)
 
 untypedDiagramForTransactionType :: TH.Type -> TH.Q TH.Exp
 untypedDiagramForTransactionType = TH.unTypeCode . diagramForTransactionType
@@ -55,6 +56,7 @@ diagramForTransactionType t = TH.Code $ do
         (Map.fromList $$(reifyMapField t ''Outputs reifyScriptOutput))
         (Map.fromList $$(reifyMapField t ''Inputs reifyWallet))
         (Map.fromList $$(reifyMapField t ''Outputs reifyWallet))
+        (Map.fromList $$(reifyMapField t ''Mints reifyMint))
     ||]
 
 reifyMapField :: forall a. TH.Type -> TH.Name -> TypeReifier a -> TH.Code TH.Q [(Text, a)]
@@ -70,10 +72,6 @@ reifyMapField t assocTypeName reifyType = TH.Code $ do
   (tyConName, tyVars, cons) <- case tyCon of
     TH.DataD _ nm tyVars _kind cons _ -> pure (nm, tyVars, cons)
     d -> (typeName, [], []) <$ TH.reportError ("Unexpected declaration of " <> TH.pprint tyCon <> ": " <> show d)
-  (walletVar, scriptVar, rest) <- case reverse tyVars of
-    a:b:vs -> pure (unKind a, unKind b, unKind <$> reverse vs)
-    _ ->
-      (tyConName, tyConName, []) <$ TH.reportError ("Less than two type vars on " <> TH.pprint tyCon <> " declaration")
   fields <- case cons of
     [TH.NormalC _ []] -> pure []
     [TH.RecC _ flds] -> pure flds
@@ -83,15 +81,15 @@ reifyMapField t assocTypeName reifyType = TH.Code $ do
   let reifyField :: TH.VarBangType -> Maybe (TH.Q (TH.TExp (Text, a)))
       reifyField (name, _, fieldType) =
         TH.examineCode . (flip TH.bindCode $ addName name) . TH.examineCode
-        <$> reifyType scriptVar walletVar varBindings fieldType
+        <$> reifyType varBindings fieldType
       addName :: TH.Name -> TH.TExp a -> TH.Code TH.Q (Text, a) 
       addName name a = [|| (Text.pack $$(stringLiteral $ TH.nameBase name), $$(TH.Code $ pure a)) ||]
       varBindings :: [(TH.Name, Maybe TH.Type)]
-      varBindings = zip rest (map Just typeArgs <> repeat Nothing)
+      varBindings = zip (unKind <$> tyVars) (map Just typeArgs <> repeat Nothing)
   sequenceExps $ sequenceA $ mapMaybe reifyField fields
 
 reifyScriptInput :: HasCallStack => TypeReifier InputFromScript
-reifyScriptInput scriptVar _walletVar vars
+reifyScriptInput vars
   (TH.AppT
     (TH.AppT
       (TH.AppT
@@ -99,7 +97,7 @@ reifyScriptInput scriptVar _walletVar vars
         redeemerType)
       datumType)
     currencies)
-  | s == scriptVar = Just
+  | _wallet : (scriptVar, _) : _ <- reverse vars, s == scriptVar = Just
     [||
       InputFromScript
         $$(textLiteral $ typeDescription vars scriptType)
@@ -107,31 +105,47 @@ reifyScriptInput scriptVar _walletVar vars
         $$(textLiteral $ typeDescription vars datumType)
         $$(currencyDescriptions vars currencies)
     ||]
-reifyScriptInput _ _ _ _ = Nothing
+reifyScriptInput _ _ = Nothing
 
 reifyWallet :: HasCallStack => TypeReifier Wallet
-reifyWallet _scriptVar walletVar vars (TH.AppT (TH.VarT w) currencies)
-  | w == walletVar = Just
+reifyWallet vars (TH.AppT (TH.VarT w) currencies)
+  | (walletVar, _) : _ <- reverse vars, w == walletVar = Just
     [||
       Wallet (Text.pack "W") $$(currencyDescriptions vars currencies)
     ||]
-reifyWallet _ _ _ _ = Nothing
+reifyWallet _ _ = Nothing
 
 reifyScriptOutput :: HasCallStack => TypeReifier OutputToScript
-reifyScriptOutput scriptVar _walletVar vars
+reifyScriptOutput vars
   (TH.AppT
     (TH.AppT
      (TH.AppT (TH.VarT s) scriptType)
      datumType)
     currencies)
-  | s == scriptVar = Just
+  | _wallet : (scriptVar, _) : _ <- reverse vars, s == scriptVar = Just
     [||
       OutputToScript
         $$(textLiteral $ typeDescription vars scriptType)
         $$(textLiteral $ typeDescription vars datumType)
         $$(currencyDescriptions vars currencies)
     ||]
-reifyScriptOutput _ _ _ _ = Nothing
+reifyScriptOutput _ _ = Nothing
+
+reifyMint :: HasCallStack => TypeReifier MintOrBurn
+reifyMint vars
+  (TH.AppT
+    (TH.AppT
+     (TH.AppT (TH.VarT mp) scriptType)
+     redeemerType)
+    currencies)
+  | (mpVar, _) : _ <- reverse vars, mp == mpVar = Just
+    [||
+      MintOrBurn
+        $$(textLiteral $ typeDescription vars scriptType)
+        $$(textLiteral $ typeDescription vars redeemerType)
+        $$(currencyDescriptions vars currencies)
+    ||]
+reifyMint _ _ = Nothing
 
 currencyDescriptions :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q [Currency]
 currencyDescriptions vars =
