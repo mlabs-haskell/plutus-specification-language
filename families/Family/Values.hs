@@ -28,10 +28,10 @@ data TxSpecimen t = TxSpecimen {
   txFee :: Value '[ 'Ada ],
   txSignatures :: Map PubKey Signature}
 
-type TxInputSpecimen :: forall (s :: script) -> Redeemer s -> Datum s -> [currency] -> Type
-data TxInputSpecimen s r d e = TxInputSpecimen {
-  txInputOut      :: TxOutSpecimen s d e,
-  txInputRedeemer :: RedeemerSpecimen s r}
+type TxInputSpecimen :: forall (s :: script) -> Maybe (Redeemer s) -> Datum s -> [currency] -> Type
+data TxInputSpecimen s r d e where
+  TxInputSpendingSpecimen :: TxOutSpecimen s d e -> RedeemerSpecimen s r -> TxInputSpecimen s ('Just r) d e
+  TxInputReferenceSpecimen :: TxOutSpecimen s d e -> RedeemerSpecimen s r -> TxInputSpecimen s 'Nothing d e
 
 type TxMintSpecimen :: forall (mp :: policy) -> MintRedeemer mp -> [MintedToken mp] -> Type
 data TxMintSpecimen mp r e = TxMintSpecimen {

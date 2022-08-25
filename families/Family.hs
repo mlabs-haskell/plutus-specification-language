@@ -26,7 +26,7 @@ type Economy :: fam -> Type
 type family Economy t
 
 class Transaction (t :: familie) where
-  type Inputs t  :: (forall (s :: DApp t) -> Redeemer s -> Datum s -> [Economy t] -> Type)
+  type Inputs t  :: (forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> [Economy t] -> Type)
                  -> ([Economy t] -> Type)
                  -> Type
   type Mints t   :: (forall (mp :: DApp t) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
@@ -41,7 +41,7 @@ data NoMints t mp = NoMints
 type Wallet :: c -> k -> (c -> Type) -> Type
 data Wallet c s w
 
-type InputWallet :: c -> (forall s -> Redeemer s -> Datum s -> c -> Type) -> (c -> Type) -> Type
+type InputWallet :: c -> (forall s -> Maybe (Redeemer s) -> Datum s -> c -> Type) -> (c -> Type) -> Type
 data InputWallet c s w
 
 data Ada = Ada

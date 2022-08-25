@@ -120,37 +120,37 @@ exampleExchangeTransaction = TxSpecimen {
   txFee = exampleFee,
   txSignatures = Map.empty}
 
-exampleExchangeInput :: TxInputSpecimen 'CentralExchange '() '() '[]
-exampleExchangeInput = TxInputSpecimen {
-  txInputOut = TxOutSpecimen {
+exampleExchangeInput :: TxInputSpecimen 'CentralExchange ('Just '()) '() '[]
+exampleExchangeInput = TxInputSpendingSpecimen
+  TxOutSpecimen {
     txOutDatum = Const (),
-    txOutValue = Value Destitute},
-  txInputRedeemer = Const ()}
+    txOutValue = Value Destitute}
+  (Const ())
   
 exampleExchangeOutput :: TxOutSpecimen 'CentralExchange '() ['Token 1, 'Token 2]
 exampleExchangeOutput = TxOutSpecimen {
   txOutDatum = Const (),
   txOutValue = Value (1 :$ Proxy @('Token 1) :+ 1 :$ Proxy @('Token 2))}
 
-exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Type.Trade '() '[ 'Token 1 ]
-exampleOracle1Input = TxInputSpecimen {
-  txInputOut = TxOutSpecimen {
+exampleOracle1Input :: TxInputSpecimen ('Oracle 1) ('Just 'Type.Trade) '() '[ 'Token 1 ]
+exampleOracle1Input = TxInputSpendingSpecimen
+  TxOutSpecimen {
     txOutDatum = OracleDatum {
       priceInLovelace = 45,
       maxTradeVolume = 5_000,
       expiry = 20_000_000},
-    txOutValue = Value (1 :$ Proxy @('Token 1))},
-  txInputRedeemer = DoTrade}
+    txOutValue = Value (1 :$ Proxy @('Token 1))}
+  DoTrade
 
-exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Type.Trade '() '[ 'Token 2 ]
-exampleOracle2Input = TxInputSpecimen {
-  txInputOut = TxOutSpecimen {
+exampleOracle2Input :: TxInputSpecimen ('Oracle 2) ('Just 'Type.Trade) '() '[ 'Token 2 ]
+exampleOracle2Input = TxInputSpendingSpecimen
+  TxOutSpecimen {
     txOutDatum = OracleDatum {
       priceInLovelace = 60,
       maxTradeVolume = 10_000,
       expiry = 20_000_000},
-    txOutValue = Value (1 :$ Proxy @('Token 2))},
-  txInputRedeemer = DoTrade}
+    txOutValue = Value (1 :$ Proxy @('Token 2))}
+  DoTrade
 
 exampleOracle1Output :: TxOutSpecimen ('Oracle 1) '() '[ 'Token 1 ]
 exampleOracle1Output = TxOutSpecimen {
