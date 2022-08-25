@@ -94,9 +94,9 @@ data ExchangeDApp = Oracle Natural | CentralExchange
 type instance DApp (t :: TransactionFamily) = ExchangeDApp
 type instance Economy (t :: TransactionFamily) = Token
 
-type UpdateOracleInputs :: Natural -> (forall (s :: ExchangeDApp) -> Redeemer s -> Datum s -> [Token] -> Type) -> (c -> Type) -> Type
+type UpdateOracleInputs :: Natural -> (forall (s :: ExchangeDApp) -> Maybe (Redeemer s) -> Datum s -> [Token] -> Type) -> (c -> Type) -> Type
 data UpdateOracleInputs n s w = UpdateOracleInputs {
-  oracle :: s ('Oracle n) 'Update '() '[ 'Token n ]}
+  oracle :: s ('Oracle n) ('Just 'Update) '() '[ 'Token n ]}
 type UpdateOracleOutputs :: Natural -> (forall (s :: ExchangeDApp) -> Datum s -> [Token] -> Type) -> (c -> Type) -> Type
 data UpdateOracleOutputs n s w = UpdateOracleOutputs {
   oracle :: s ('Oracle n) '() '[ 'Token n ]}
@@ -104,11 +104,11 @@ instance Transaction ('UpdateOracle n) where
   type Inputs ('UpdateOracle n) = UpdateOracleInputs n
   type Outputs ('UpdateOracle n) = UpdateOracleOutputs n
 
-type ExchangeInputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Redeemer s -> Datum s -> [Token] -> Type) -> ([Token] -> Type) -> Type
+type ExchangeInputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Maybe (Redeemer s) -> Datum s -> [Token] -> Type) -> ([Token] -> Type) -> Type
 data ExchangeInputs m n s w = ExchangeInputs {
-  exchange :: s 'CentralExchange '() '() '[],
-  oracle1 :: s ('Oracle m) 'Trade '() '[ 'Token m ],
-  oracle2 :: s ('Oracle n) 'Trade '() '[ 'Token n ],
+  exchange :: s 'CentralExchange ('Just '()) '() '[],
+  oracle1 :: s ('Oracle m) ('Just 'Trade) '() '[ 'Token m ],
+  oracle2 :: s ('Oracle n) ('Just 'Trade) '() '[ 'Token n ],
   wallet1 :: w '[ 'Token m ],
   wallet2 :: w ' ['Token n ]}
 type ExchangeOutputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Datum s -> [Token] -> Type) -> ([Token] -> Type) -> Type
@@ -122,9 +122,9 @@ instance Transaction ('Exchange m n) where
   type Inputs ('Exchange m n) = ExchangeInputs m n
   type Outputs ('Exchange m n) = ExchangeOutputs m n
 
-type DrainInputs :: (forall (s :: ExchangeDApp) -> Redeemer s -> Datum s -> [Token] -> Type) -> ([Token] -> Type) -> Type
+type DrainInputs :: (forall (s :: ExchangeDApp) -> Maybe (Redeemer s) -> Datum s -> [Token] -> Type) -> ([Token] -> Type) -> Type
 data DrainInputs s w = DrainInputs {
-  exchange :: s 'CentralExchange '() '() ['Token 1, 'Token 2]}
+  exchange :: s 'CentralExchange ('Just '()) '() ['Token 1, 'Token 2]}
 type DrainOutputs :: (forall (s :: ExchangeDApp) -> Datum s -> [Token] -> Type) -> ([Token] -> Type) -> Type
 data DrainOutputs s w = DrainOutputs {
   authority :: w ['Token 1, 'Token 2],
