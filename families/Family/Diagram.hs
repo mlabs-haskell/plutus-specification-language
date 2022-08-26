@@ -2,6 +2,8 @@
 
 module Family.Diagram where
 
+import Debug.Trace
+
 import Family (Transaction)
 import Control.Arrow ((&&&))
 import Data.Bifunctor (first, second)
@@ -24,7 +26,7 @@ import Data.GraphViz (
   GraphvizParams(clusterBy, clusterID, fmtCluster, fmtEdge, fmtNode, globalAttributes, isDotCluster),
   NodeCluster (C, N), GraphID (Num), Number (Int),
   defaultParams, graphToDot, preview, runGraphviz, runGraphvizCanvas', toLabel)
-import Data.GraphViz.Attributes (diamond)
+import Data.GraphViz.Attributes (dashed, diamond, style)
 import Data.GraphViz.Attributes.Complete (
   Attribute (ArrowHead, ArrowTail, Shape, Weight),
   Shape (DoubleOctagon, InvTrapezium))
@@ -39,7 +41,7 @@ data TransactionTypeDiagram = TransactionTypeDiagram {
 
 data InputFromScript = InputFromScript {
   fromScript :: Text,
-  redeemer :: Text,
+  redeemer :: Maybe Text,
   datum :: Text,
   currencies :: [Currency]}
 
@@ -79,6 +81,9 @@ nodeTypeRange = fromEnum (maxBound :: NodeType) + 1
 isTransaction :: Int -> Bool
 isTransaction = (== Transaction) . nodeType
 
+isScriptUTxO :: Int -> Bool
+isScriptUTxO = (`elem` [TransactionInputFromScript, TransactionOutputToScript]) . nodeType
+
 transactionGraphToDot :: Text -> Gr NodeId Text -> DotGraph Int
 transactionGraphToDot caption g = graphToDot params g' where
   g' :: Gr Text Text
@@ -102,8 +107,9 @@ transactionGraphToDot caption g = graphToDot params g' where
     fmtEdge = \ (src, dest, l) ->
       toLabel l
       : if isTransaction dest && nodeType src == TransactionInputFromWallet then [Weight $ Int 0]
+        else if isTransaction dest && isScriptUTxO src && not ('@' `Text.elem` l) then [style dashed]
         else if isTransaction src && nodeType dest == MintingPolicy then [ArrowHead diamond, ArrowTail diamond]
-        else []}
+        else traceShow (src, dest, nodeType src, nodeType dest, l) []}
   clustering :: (Int, Text) -> NodeCluster Int (Int, Text)
   clustering (n, name)
     | (Just (ins, node, _, _outs), _) <- match n g,
@@ -203,7 +209,7 @@ transactionTypeGraph
   nodes =
     (transactionNode, TransactionNamed transactionName)
     : (isNodes <> osNodes <> iwNodes <> owNodes <> mpNodes <> scriptNodes <> walletNodes)
-  edges = [ (n, transactionNode, redeemer <> "@" <> name)
+  edges = [ (n, transactionNode, foldMap (<> "@") redeemer <> name)
           | (name, InputFromScript{fromScript, redeemer, datum, currencies}) <- Map.toList scriptInputs,
             let [(n, _)] = filter ((ScriptUTxO fromScript datum currencies ==) . snd) isNodes]
        <> [ (n, transactionNode, name)

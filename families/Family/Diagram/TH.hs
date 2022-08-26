@@ -94,16 +94,16 @@ reifyScriptInput vars
     (TH.AppT
       (TH.AppT
         (TH.AppT (TH.VarT s) scriptType)
-        redeemerType)
+        optRedeemerType)
       datumType)
     currencies)
   | _wallet : (scriptVar, _) : _ <- reverse vars, s == scriptVar = Just
     [||
       InputFromScript
         $$(textLiteral $ typeDescription vars scriptType)
-        $$(textLiteral $ typeDescription vars redeemerType)
+        $$(maybeTypeDescriptionQuote vars optRedeemerType)
         $$(textLiteral $ typeDescription vars datumType)
-        $$(currencyDescriptions vars currencies)
+        $$(currencyDescriptionQuotes vars currencies)
     ||]
 reifyScriptInput _ _ = Nothing
 
@@ -111,7 +111,7 @@ reifyWallet :: HasCallStack => TypeReifier Wallet
 reifyWallet vars (TH.AppT (TH.VarT w) currencies)
   | (walletVar, _) : _ <- reverse vars, w == walletVar = Just
     [||
-      Wallet (Text.pack "W") $$(currencyDescriptions vars currencies)
+      Wallet (Text.pack "W") $$(currencyDescriptionQuotes vars currencies)
     ||]
 reifyWallet _ _ = Nothing
 
@@ -127,7 +127,7 @@ reifyScriptOutput vars
       OutputToScript
         $$(textLiteral $ typeDescription vars scriptType)
         $$(textLiteral $ typeDescription vars datumType)
-        $$(currencyDescriptions vars currencies)
+        $$(currencyDescriptionQuotes vars currencies)
     ||]
 reifyScriptOutput _ _ = Nothing
 
@@ -143,18 +143,24 @@ reifyMint vars
       MintOrBurn
         $$(textLiteral $ typeDescription vars scriptType)
         $$(textLiteral $ typeDescription vars redeemerType)
-        $$(currencyDescriptions vars currencies)
+        $$(currencyDescriptionQuotes vars currencies)
     ||]
 reifyMint _ _ = Nothing
 
-currencyDescriptions :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q [Currency]
-currencyDescriptions vars =
+currencyDescriptionQuotes :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q [Currency]
+currencyDescriptionQuotes vars =
   TH.unsafeCodeCoerce . pure . TH.ListE . map (TH.LitE . TH.StringL . Text.unpack) . typeDescriptions vars
 
 typeDescriptions :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> [Text]
 typeDescriptions vars (TH.AppT (TH.AppT TH.PromotedConsT t) ts) = typeDescription vars t : typeDescriptions vars ts
 typeDescriptions vars TH.PromotedNilT = []
 typeDescriptions vars (TH.SigT t _) = typeDescriptions vars t
+
+maybeTypeDescriptionQuote :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q (Maybe Text)
+maybeTypeDescriptionQuote vars (TH.AppT (TH.PromotedT j) t)
+  | j == 'Just = [|| Just $$(textLiteral $ typeDescription vars t) ||]
+maybeTypeDescriptionQuote vars (TH.PromotedT n) | n == 'Nothing = [|| Nothing ||]
+maybeTypeDescriptionQuote vars (TH.SigT t _) = maybeTypeDescriptionQuote vars t
 
 typeDescription :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> Text
 typeDescription _ (TH.PromotedT name) = Text.pack (TH.nameBase name)
