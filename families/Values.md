@@ -147,23 +147,23 @@ exampleOracle2Input = TxInputReferenceSpecimen
       expiry = 20_000_000},
     txOutValue = Value (1 :$ Proxy @('Token 2))}
 
-exampleWallet1Input :: WalletSpecimen '[ 'Token 1 ]
+exampleWallet1Input :: WalletSpecimen "Wallet 1" '[ 'Token 1 ]
 exampleWallet1Input = WalletSpecimen pubKey1
 
-exampleWallet1Output :: WalletSpecimen '[ 'Token 2 ]
+exampleWallet1Output :: WalletSpecimen "Wallet 1" '[ 'Token 2 ]
 exampleWallet1Output = WalletSpecimen pubKey1
 
-exampleWallet2Input :: WalletSpecimen '[ 'Token 2 ]
+exampleWallet2Input :: WalletSpecimen "Wallet 2" '[ 'Token 2 ]
 exampleWallet2Input = WalletSpecimen pubKey2
 
-exampleWallet2Output :: WalletSpecimen '[ 'Token 1 ]
+exampleWallet2Output :: WalletSpecimen "Wallet 2" '[ 'Token 1 ]
 exampleWallet2Output = WalletSpecimen pubKey2
 
 pubKey1, pubKey2 :: PubKey
 pubKey1 = "wallet1"
 pubKey2 = "wallet2"
 
-exampleCollateralWallet :: WalletSpecimen Collateral
+exampleCollateralWallet :: WalletSpecimen "Collateral" Collateral
 exampleCollateralWallet = undefined
 
 exampleFee :: Value '[ 'Ada ]

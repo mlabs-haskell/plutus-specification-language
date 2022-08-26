@@ -21,7 +21,7 @@ type family RedeemerSpecimen s :: Redeemer s -> Type
 
 data TxSpecimen t = TxSpecimen {
   txInputs :: Inputs t TxInputSpecimen WalletSpecimen,
-  txCollateral :: WalletSpecimen Collateral,
+  txCollateral :: WalletSpecimen "Collateral" Collateral,
   txOutputs :: Outputs t TxOutSpecimen WalletSpecimen,
   txMint :: Mints t TxMintSpecimen,
   txValidRange :: !SlotRange,
@@ -37,7 +37,7 @@ type TxMintSpecimen :: forall (mp :: policy) -> MintRedeemer mp -> [MintedToken 
 data TxMintSpecimen mp r e = TxMintSpecimen {
   txMintValue :: Value e}
 
-data WalletSpecimen e = WalletSpecimen {
+data WalletSpecimen name e = WalletSpecimen {
   walletPubKey :: PubKey}
 
 type TxOutSpecimen :: forall (s :: script) -> Datum s -> [currency] -> Type

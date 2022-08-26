@@ -108,10 +108,10 @@ reifyScriptInput vars
 reifyScriptInput _ _ = Nothing
 
 reifyWallet :: HasCallStack => TypeReifier Wallet
-reifyWallet vars (TH.AppT (TH.VarT w) currencies)
+reifyWallet vars (TH.AppT (TH.AppT (TH.VarT w) name) currencies)
   | (walletVar, _) : _ <- reverse vars, w == walletVar = Just
     [||
-      Wallet (Text.pack "W") $$(currencyDescriptionQuotes vars currencies)
+      Wallet $$(textLiteral $ typeDescription vars name) $$(currencyDescriptionQuotes vars currencies)
     ||]
 reifyWallet _ _ = Nothing
 
@@ -165,6 +165,7 @@ maybeTypeDescriptionQuote vars (TH.SigT t _) = maybeTypeDescriptionQuote vars t
 typeDescription :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> Text
 typeDescription _ (TH.PromotedT name) = Text.pack (TH.nameBase name)
 typeDescription _ (TH.LitT (TH.NumTyLit n)) = Text.pack (show n)
+typeDescription _ (TH.LitT (TH.StrTyLit s)) = Text.pack s
 typeDescription _ t@TH.PromotedTupleT{} = Text.pack (dropWhile (== '\'') $ TH.pprint t)
 typeDescription vars (TH.AppT t (TH.VarT v)) =
   typeDescription vars t

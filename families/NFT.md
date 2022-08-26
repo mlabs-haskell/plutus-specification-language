@@ -3,13 +3,12 @@
 <!--
 ~~~ {.haskell}
 {-# LANGUAGE DataKinds, ExplicitForAll, KindSignatures, StandaloneKindSignatures,
-             MultiParamTypeClasses, PolyKinds, RankNTypes, TypeFamilies, TypeOperators #-}
+             PolyKinds, RankNTypes, TypeFamilies, TypeOperators #-}
 
 module NFT where
 
-import Data.Functor.Const (Const)
 import Data.Kind (Type)
-import Data.Map (Map)
+import GHC.TypeLits (Symbol)
 import Numeric.Natural (Natural)
 import Ledger
 import Family
@@ -52,13 +51,13 @@ instance ValidatorScript 'CentralExchange where
   type Datum 'CentralExchange = ()
   type Redeemer 'CentralExchange = ()
 
-type InitializeInputs :: (forall (s :: ExchangeDApp) -> Maybe (Redeemer s) -> Datum s -> [Token] -> Type) -> ([Token] -> Type) -> Type
+type InitializeInputs :: (forall (s :: ExchangeDApp) -> Maybe (Redeemer s) -> Datum s -> [Token] -> Type) -> (Symbol -> [Token] -> Type) -> Type
 data InitializeInputs s w = InitializeInputs {
-  nftSource :: w '[]}
+  nftSource :: w "Owner's wallet" '[]}
 type InitializeMints :: (forall (mp :: ExchangeDApp) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
 data InitializeMints mp = InitializeMints {
   authorization :: mp 'AuthorizingMint '() '[ 'AuthNFT ]}
-type InititalizeOutputs :: (forall (s :: ExchangeDApp) -> Datum s -> [Token] -> Type) -> (c -> Type) -> Type
+type InititalizeOutputs :: (forall (s :: ExchangeDApp) -> Datum s -> [Token] -> Type) -> (Symbol -> [Token] -> Type) -> Type
 data InititalizeOutputs s w = InititalizeOutputs {
   exchange :: s 'CentralExchange '() '[ 'Minted 'AuthNFT ]}
 instance Transaction 'Initialize where
