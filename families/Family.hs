@@ -38,10 +38,4 @@ class Transaction (t :: familie) where
 type NoMints :: forall k -> (forall (mp :: k) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
 data NoMints t mp = NoMints
 
-type Wallet :: c -> k -> (c -> Type) -> Type
-data Wallet c s w
-
-type InputWallet :: c -> (forall s -> Maybe (Redeemer s) -> Datum s -> c -> Type) -> (c -> Type) -> Type
-data InputWallet c s w
-
 data Ada = Ada
