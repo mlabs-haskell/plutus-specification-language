@@ -43,7 +43,7 @@ type Economy :: fam -> Type
 type family Economy t
 
 class Transaction (t :: familie) where
-  type Inputs t  :: (forall (s :: DApp t) -> Redeemer s -> Datum s -> [Economy t] -> Type)
+  type Inputs t  :: (forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> [Economy t] -> Type)
                  -> ([Economy t] -> Type)
                  -> Type
   type Mints t   :: (forall (mp :: DApp t) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
@@ -63,6 +63,7 @@ data InputWallet c s w
 ~~~
 
 The core `data TransactionFamily` and `instance ValidatorScript` declarations remain unchanged.
+`Trade` redeemer any longer because
 
 <!--
 ~~~ {.haskell}
@@ -72,7 +73,7 @@ data TransactionFamily =
   | DrainCollectedFees
 data Token = Token Natural | ScriptAda
 
-data OracleRedeemer (n :: Natural) = Trade | Update
+data OracleRedeemer (n :: Natural) = Update
 
 instance ValidatorScript ('Oracle n) where
   type Currencies ('Oracle n) = '[ 'Token n ]
@@ -107,15 +108,13 @@ instance Transaction ('UpdateOracle n) where
 type ExchangeInputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Maybe (Redeemer s) -> Datum s -> [Token] -> Type) -> ([Token] -> Type) -> Type
 data ExchangeInputs m n s w = ExchangeInputs {
   exchange :: s 'CentralExchange ('Just '()) '() '[],
-  oracle1 :: s ('Oracle m) ('Just 'Trade) '() '[ 'Token m ],
-  oracle2 :: s ('Oracle n) ('Just 'Trade) '() '[ 'Token n ],
+  oracle1 :: s ('Oracle m) 'Nothing '() '[ 'Token m ],
+  oracle2 :: s ('Oracle n) 'Nothing '() '[ 'Token n ],
   wallet1 :: w '[ 'Token m ],
   wallet2 :: w ' ['Token n ]}
 type ExchangeOutputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Datum s -> [Token] -> Type) -> ([Token] -> Type) -> Type
 data ExchangeOutputs m n s w = ExchangeOutputs {
   exchange :: s 'CentralExchange '() ['Token m, 'Token n],
-  oracle1 :: s ('Oracle m) '() '[ 'Token m ],
-  oracle2 :: s ('Oracle n) '() '[ 'Token n ],
   wallet1 :: w '[ 'Token n ],
   wallet2 :: w '[ 'Token m ]}
 instance Transaction ('Exchange m n) where

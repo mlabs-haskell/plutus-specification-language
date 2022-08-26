@@ -31,10 +31,10 @@ definitions and import the [type-level definitions](HKD):
 import HKD (
   ExchangeDApp(Oracle, CentralExchange),
   ExchangeInputs(ExchangeInputs, exchange, oracle1, oracle2, wallet1, wallet2),
-  ExchangeOutputs(ExchangeOutputs, exchange, oracle1, oracle2, wallet1, wallet2),
+  ExchangeOutputs(ExchangeOutputs, exchange, wallet1, wallet2),
   TransactionFamily(UpdateOracle, Exchange, DrainCollectedFees),
   Token(Token))
-import qualified HKD as Type (OracleRedeemer (Trade, Update))
+import qualified HKD as Type (OracleRedeemer (Update))
 ~~~
 
 Now we can declare the value-level types for different validator scripts:
@@ -55,7 +55,6 @@ data OracleDatum d where
     -> OracleDatum '()
 
 data OracleRedeemer n r where
-  DoTrade :: OracleRedeemer n 'Type.Trade
   DoUpdate :: OracleRedeemer n 'Type.Update
 ~~~
 
@@ -111,8 +110,6 @@ exampleExchangeTransaction = TxSpecimen {
   txCollateral = exampleCollateralWallet,
   txOutputs = ExchangeOutputs {
     exchange = exampleExchangeOutput,
-    oracle1 = exampleOracle1Output,
-    oracle2 = exampleOracle2Output,
     wallet1 = exampleWallet1Output,
     wallet2 = exampleWallet2Output},
   txMint = NoMints,
@@ -132,41 +129,23 @@ exampleExchangeOutput = TxOutSpecimen {
   txOutDatum = Const (),
   txOutValue = Value (1 :$ Proxy @('Token 1) :+ 1 :$ Proxy @('Token 2))}
 
-exampleOracle1Input :: TxInputSpecimen ('Oracle 1) ('Just 'Type.Trade) '() '[ 'Token 1 ]
-exampleOracle1Input = TxInputSpendingSpecimen
+exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Nothing '() '[ 'Token 1 ]
+exampleOracle1Input = TxInputReferenceSpecimen
   TxOutSpecimen {
     txOutDatum = OracleDatum {
       priceInLovelace = 45,
       maxTradeVolume = 5_000,
       expiry = 20_000_000},
     txOutValue = Value (1 :$ Proxy @('Token 1))}
-  DoTrade
 
-exampleOracle2Input :: TxInputSpecimen ('Oracle 2) ('Just 'Type.Trade) '() '[ 'Token 2 ]
-exampleOracle2Input = TxInputSpendingSpecimen
+exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Nothing '() '[ 'Token 2 ]
+exampleOracle2Input = TxInputReferenceSpecimen
   TxOutSpecimen {
     txOutDatum = OracleDatum {
       priceInLovelace = 60,
       maxTradeVolume = 10_000,
       expiry = 20_000_000},
     txOutValue = Value (1 :$ Proxy @('Token 2))}
-  DoTrade
-
-exampleOracle1Output :: TxOutSpecimen ('Oracle 1) '() '[ 'Token 1 ]
-exampleOracle1Output = TxOutSpecimen {
-  txOutDatum = OracleDatum {
-    priceInLovelace = 45,
-    maxTradeVolume = 3_000,
-    expiry = 20_000_000},
-  txOutValue = Value (1 :$ Proxy @('Token 1))}
-
-exampleOracle2Output :: TxOutSpecimen ('Oracle 2) '() '[ 'Token 2 ]
-exampleOracle2Output = TxOutSpecimen {
-  txOutDatum = OracleDatum {
-    priceInLovelace = 60,
-    maxTradeVolume = 8_500,
-    expiry = 20_000_000},
-  txOutValue = Value (1 :$ Proxy @('Token 2))}
 
 exampleWallet1Input :: WalletSpecimen '[ 'Token 1 ]
 exampleWallet1Input = WalletSpecimen pubKey1
