@@ -52,6 +52,9 @@ instance ValidatorScript 'CentralExchange where
   type Datum 'CentralExchange = ()
   type Redeemer 'CentralExchange = ()
 
+type InitializeInputs :: (forall (s :: ExchangeDApp) -> Maybe (Redeemer s) -> Datum s -> [Token] -> Type) -> ([Token] -> Type) -> Type
+data InitializeInputs s w = InitializeInputs {
+  nftSource :: w '[]}
 type InitializeMints :: (forall (mp :: ExchangeDApp) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
 data InitializeMints mp = InitializeMints {
   authorization :: mp 'AuthorizingMint '() '[ 'AuthNFT ]}
@@ -59,7 +62,7 @@ type InititalizeOutputs :: (forall (s :: ExchangeDApp) -> Datum s -> [Token] -> 
 data InititalizeOutputs s w = InititalizeOutputs {
   exchange :: s 'CentralExchange '() '[ 'Minted 'AuthNFT ]}
 instance Transaction 'Initialize where
-  type Inputs 'Initialize = InputWallet '[ 'ScriptAda ]
+  type Inputs 'Initialize = InitializeInputs
   type Mints 'Initialize = InitializeMints
   type Outputs 'Initialize = InititalizeOutputs
 ~~~
