@@ -67,7 +67,7 @@ data OracleDatum = OracleDatum {
   maxTradeVolume :: Natural,
   expiry :: POSIXTime
   }
-data OracleRedeemer = Trade | Update
+data OracleRedeemer = Update
 
 class ValidatorScript s where
   type Currencies s :: [k]
@@ -87,23 +87,21 @@ instance ValidatorScript 'CentralExchange where
   type Redeemer 'CentralExchange = ()
 
 instance Transaction ('UpdateOracle n) where
-  type Inputs ('UpdateOracle n) = '[ScriptInput ('Oracle n) 'Update]
+  type Inputs ('UpdateOracle n) = '[ScriptInput ('Oracle n) 'Nothing]
   type Outputs ('UpdateOracle n) = '[ScriptOutput ('Oracle n)]
 instance Transaction ('Exchange m n) where
   type Inputs ('Exchange m n) = [
-    ScriptInput 'CentralExchange '(),
-    ScriptInput ('Oracle m) 'Trade,
-    ScriptInput ('Oracle n) 'Trade,
+    ScriptInput 'CentralExchange ('Just '()),
+    ScriptInput ('Oracle m) 'Nothing,
+    ScriptInput ('Oracle n) 'Nothing,
     WalletInput ['Token m, 'Ada],
     WalletInput ['Token n, 'Ada]]
   type Outputs ('Exchange m n) = [
     ScriptOutput 'CentralExchange,
-    ScriptOutput ('Oracle m),
-    ScriptOutput ('Oracle n),
     WalletOutput '[ 'Token m ],
     WalletOutput '[ 'Token n ]]
 instance Transaction 'DrainCollectedFees where
-  type Inputs 'DrainCollectedFees = '[ScriptInput 'CentralExchange '()]
+  type Inputs 'DrainCollectedFees = '[ScriptInput 'CentralExchange ('Just '())]
   type Outputs 'DrainCollectedFees = '[ScriptOutput 'CentralExchange]
 ~~~
 
@@ -132,13 +130,15 @@ Note the dependent kind quantification here, necessary because the redeemer
 type depends on the script:
 
 ~~~ {.haskell}
-type ScriptInput :: forall (script :: DApp) -> Redeemer script -> Type
+type ScriptInput :: forall (script :: DApp) -> Maybe (Redeemer script) -> Type
 data ScriptInput script redeemer
 data ScriptOutput (script :: DApp)
 
 data WalletInput currencies
 data WalletOutput currencies
 ~~~
+
+A `ScriptInput` that specifies `'Nothing` for the redeemer signifies a reference input.
 
 Unfortunately GHC's kinds other than `Type` turn out to be difficult to work with, so we'll replace the use of list
 kinds with [Higher-Kinded Data](HKD.md).

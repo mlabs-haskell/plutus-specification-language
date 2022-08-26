@@ -31,7 +31,7 @@ data TxSpecimen t = TxSpecimen {
 type TxInputSpecimen :: forall (s :: script) -> Maybe (Redeemer s) -> Datum s -> [currency] -> Type
 data TxInputSpecimen s r d e where
   TxInputSpendingSpecimen :: TxOutSpecimen s d e -> RedeemerSpecimen s r -> TxInputSpecimen s ('Just r) d e
-  TxInputReferenceSpecimen :: TxOutSpecimen s d e -> RedeemerSpecimen s r -> TxInputSpecimen s 'Nothing d e
+  TxInputReferenceSpecimen :: TxOutSpecimen s d e -> TxInputSpecimen s 'Nothing d e
 
 type TxMintSpecimen :: forall (mp :: policy) -> MintRedeemer mp -> [MintedToken mp] -> Type
 data TxMintSpecimen mp r e = TxMintSpecimen {
