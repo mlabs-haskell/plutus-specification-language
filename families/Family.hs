@@ -1,14 +1,10 @@
-{-# LANGUAGE DataKinds, ExplicitForAll, GADTs,
-             PolyKinds, RankNTypes, StandaloneKindSignatures,
-             TypeFamilies, TypeFamilyDependencies, TypeOperators,
-             UndecidableInstances #-}
+{-# LANGUAGE DataKinds, GADTs, PolyKinds, RankNTypes, StandaloneKindSignatures,
+             TypeFamilies, TypeOperators, UndecidableInstances #-}
 
 module Family where
 
-import Data.Functor.Const (Const)
 import Data.Kind (Type)
-import Data.Map (Map)
-import Numeric.Natural (Natural)
+import GHC.TypeLits (Symbol)
 
 class ValidatorScript s where
   type Currencies s :: [k]
@@ -27,11 +23,11 @@ type family Economy t
 
 class Transaction (t :: familie) where
   type Inputs t  :: (forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> [Economy t] -> Type)
-                 -> ([Economy t] -> Type)
+                 -> (Symbol -> [Economy t] -> Type)
                  -> Type
   type Mints t   :: (forall (mp :: DApp t) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
   type Outputs t :: (forall (s :: DApp t) -> Datum s -> [Economy t] -> Type)
-                 -> ([Economy t] -> Type)
+                 -> (Symbol -> [Economy t] -> Type)
                  -> Type
   type Mints t = NoMints (DApp t)
 
