@@ -2,8 +2,6 @@
 
 module Family.Diagram where
 
-import Debug.Trace
-
 import Family (Transaction)
 import Control.Arrow ((&&&))
 import Data.Bifunctor (first, second)
@@ -109,7 +107,7 @@ transactionGraphToDot caption g = graphToDot params g' where
       : if isTransaction dest && nodeType src == TransactionInputFromWallet then [Weight $ Int 0]
         else if isTransaction dest && isScriptUTxO src && not ('@' `Text.elem` l) then [style dashed]
         else if isTransaction src && nodeType dest == MintingPolicy then [ArrowHead diamond, ArrowTail diamond]
-        else traceShow (src, dest, nodeType src, nodeType dest, l) []}
+        else []}
   clustering :: (Int, Text) -> NodeCluster Int (Int, Text)
   clustering (n, name)
     | (Just (ins, node, _, _outs), _) <- match n g,
