@@ -29,13 +29,6 @@ executable diagram
   build-tool-depends: markdown-unlit:markdown-unlit
   default-language:   Haskell2010
 
-executable indigo
-  main-is:            Indigo/Diagrams.hs
-  other-modules:      Family, Family.Values, Family.Diagram, Family.Diagram.TH, Ledger, Indigo.Spec, Indigo.Values
-  ghc-options:        -main-is Indigo.Diagrams
-  build-depends:      base, bytestring, containers, text, template-haskell >= 2.18, fgl, graphviz >= 2999.10
-  default-language:   Haskell2010
-
 test-suite doc
   type:               exitcode-stdio-1.0
   main-is:            TransactionFamily.lhs
