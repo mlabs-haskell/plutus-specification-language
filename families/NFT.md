@@ -14,7 +14,7 @@ import Ledger
 import Family
 
 type instance DApp (t :: TransactionFamily) = ExchangeDApp
-type instance Economy (t :: TransactionFamily) = Token
+type instance Economy ExchangeDApp = Token
 ~~~
 -->
 
@@ -51,13 +51,13 @@ instance ValidatorScript 'CentralExchange where
   type Datum 'CentralExchange = ()
   type Redeemer 'CentralExchange = ()
 
-type InitializeInputs :: (forall (s :: ExchangeDApp) -> Maybe (Redeemer s) -> Datum s -> [Token] -> Type) -> (Symbol -> [Token] -> Type) -> Type
+type InitializeInputs :: InputsFor ExchangeDApp
 data InitializeInputs s w = InitializeInputs {
   nftSource :: w "Owner's wallet" '[]}
-type InitializeMints :: (forall (mp :: ExchangeDApp) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
+type InitializeMints :: MintsFor ExchangeDApp
 data InitializeMints mp = InitializeMints {
   authorization :: mp 'AuthorizingMint '() '[ 'AuthNFT ]}
-type InititalizeOutputs :: (forall (s :: ExchangeDApp) -> Datum s -> [Token] -> Type) -> (Symbol -> [Token] -> Type) -> Type
+type InititalizeOutputs :: OutputsFor ExchangeDApp
 data InititalizeOutputs s w = InititalizeOutputs {
   exchange :: s 'CentralExchange '() '[ 'Minted 'AuthNFT ]}
 instance Transaction 'Initialize where

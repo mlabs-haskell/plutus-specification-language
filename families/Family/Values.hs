@@ -8,10 +8,11 @@ module Family.Values where
 import Data.Functor.Const (Const)
 import Data.Kind (Type)
 import Data.Map (Map)
-import Numeric.Natural (Natural)
 import Data.Proxy (Proxy)
+import Numeric.Natural (Natural)
+import GHC.TypeLits (Symbol)
 import Ledger (PubKey, Signature, SlotRange)
-import Family (Ada(Ada), Datum, Redeemer, MintRedeemer, MintedToken, Transaction(Inputs, Mints, Outputs))
+import Family (Ada(Ada), Datum, Economy, Redeemer, MintRedeemer, MintedToken, Transaction(Inputs, Mints, Outputs))
 
 type DatumSpecimen :: forall script -> Datum script -> Type
 type family DatumSpecimen s :: Datum s -> Type
@@ -28,7 +29,7 @@ data TxSpecimen t = TxSpecimen {
   txFee :: Value '[ 'Ada ],
   txSignatures :: Map PubKey Signature}
 
-type TxInputSpecimen :: forall (s :: script) -> Maybe (Redeemer s) -> Datum s -> [currency] -> Type
+type TxInputSpecimen :: forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> [Economy dapp] -> Type
 data TxInputSpecimen s r d e where
   TxInputSpendingSpecimen :: TxOutSpecimen s d e -> RedeemerSpecimen s r -> TxInputSpecimen s ('Just r) d e
   TxInputReferenceSpecimen :: TxOutSpecimen s d e -> TxInputSpecimen s 'Nothing d e
@@ -40,7 +41,7 @@ data TxMintSpecimen mp r e = TxMintSpecimen {
 data WalletSpecimen name e = WalletSpecimen {
   walletPubKey :: PubKey}
 
-type TxOutSpecimen :: forall (s :: script) -> Datum s -> [currency] -> Type
+type TxOutSpecimen :: forall (s :: dapp) -> Datum s -> [Economy dapp] -> Type
 data TxOutSpecimen s d e = TxOutSpecimen {
   txOutDatum :: DatumSpecimen s d,
   txOutValue :: Value e}

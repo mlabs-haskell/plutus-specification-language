@@ -37,21 +37,29 @@ class MintingPolicyScript s where
 type DApp :: fam -> Type
 type family DApp t
 
-type Economy :: fam -> Type
+type Economy :: dapp -> Type
 type family Economy t
 
+type InputFromScriptToTransaction t =
+  forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> [Economy (DApp t)] -> Type
+type OutputToScriptFromTransaction t =
+  forall (s :: DApp t) -> Datum s -> [Economy (DApp t)] -> Type
+type MintForTransaction t = forall (mp :: DApp t) -> MintRedeemer mp -> [MintedToken mp] -> Type
+type WalletUTxOFor dapp = Symbol -> [Economy dapp] -> Type
+
 class Transaction (t :: familie) where
-  type Inputs t  :: (forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> [Economy t] -> Type)
-                 -> (Symbol -> [Economy t] -> Type)
-                 -> Type
-  type Mints t   :: (forall (mp :: DApp t) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
-  type Outputs t :: (forall (s :: DApp t) -> Datum s -> [Economy t] -> Type)
-                 -> (Symbol -> [Economy t] -> Type)
-                 -> Type
+  type Inputs t  :: InputFromScriptToTransaction t -> WalletUTxOFor (DApp t) -> Type
+  type Mints t   :: MintForTransaction t -> Type
+  type Outputs t :: OutputToScriptFromTransaction t -> WalletUTxOFor (DApp t) -> Type
   type Mints t = NoMints (DApp t)
 
 type NoMints :: forall k -> (forall (mp :: k) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
 data NoMints t mp = NoMints
+
+-- type/kind synonyms to simplify the kind signatures in specifications 
+type InputsFor dapp = (forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> [Economy dapp] -> Type) -> (Symbol -> [Economy dapp] -> Type) -> Type
+type MintsFor dapp = (forall (mp :: dapp) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
+type OutputsFor dapp = (forall (s :: dapp) -> Datum s -> [Economy dapp] -> Type) -> (Symbol -> [Economy dapp] -> Type) -> Type
 ~~~
 
 The core `data TransactionFamily` and `instance ValidatorScript` declarations remain unchanged.
@@ -85,26 +93,26 @@ we need to declare two new ADTs for inputs and outputs of every script:
 data ExchangeDApp = Oracle Natural | CentralExchange
 
 type instance DApp (t :: TransactionFamily) = ExchangeDApp
-type instance Economy (t :: TransactionFamily) = Token
+type instance Economy ExchangeDApp = Token
 
-type UpdateOracleInputs :: Natural -> (forall (s :: ExchangeDApp) -> Maybe (Redeemer s) -> Datum s -> [Token] -> Type) -> (Symbol -> [Token] -> Type) -> Type
+type UpdateOracleInputs :: Natural -> InputsFor ExchangeDApp
 data UpdateOracleInputs n s w = UpdateOracleInputs {
   oracle :: s ('Oracle n) ('Just 'Update) '() '[ 'Token n ]}
-type UpdateOracleOutputs :: Natural -> (forall (s :: ExchangeDApp) -> Datum s -> [Token] -> Type) -> (Symbol -> [Token] -> Type) -> Type
+type UpdateOracleOutputs :: Natural -> OutputsFor ExchangeDApp
 data UpdateOracleOutputs n s w = UpdateOracleOutputs {
   oracle :: s ('Oracle n) '() '[ 'Token n ]}
 instance Transaction ('UpdateOracle n) where
   type Inputs ('UpdateOracle n) = UpdateOracleInputs n
   type Outputs ('UpdateOracle n) = UpdateOracleOutputs n
 
-type ExchangeInputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Maybe (Redeemer s) -> Datum s -> [Token] -> Type) -> (Symbol -> [Token] -> Type) -> Type
+type ExchangeInputs :: Natural -> Natural -> InputsFor ExchangeDApp
 data ExchangeInputs m n s w = ExchangeInputs {
   exchange :: s 'CentralExchange ('Just '()) '() '[],
   oracle1 :: s ('Oracle m) 'Nothing '() '[ 'Token m ],
   oracle2 :: s ('Oracle n) 'Nothing '() '[ 'Token n ],
   wallet1 :: w "Wallet 1" '[ 'Token m ],
   wallet2 :: w "Wallet 2" ' ['Token n ]}
-type ExchangeOutputs :: Natural -> Natural -> (forall (s :: ExchangeDApp) -> Datum s -> [Token] -> Type) -> (Symbol -> [Token] -> Type) -> Type
+type ExchangeOutputs :: Natural -> Natural -> OutputsFor ExchangeDApp
 data ExchangeOutputs m n s w = ExchangeOutputs {
   exchange :: s 'CentralExchange '() ['Token m, 'Token n],
   wallet1 :: w "Wallet 1" '[ 'Token n ],
@@ -113,10 +121,10 @@ instance Transaction ('Exchange m n) where
   type Inputs ('Exchange m n) = ExchangeInputs m n
   type Outputs ('Exchange m n) = ExchangeOutputs m n
 
-type DrainInputs :: (forall (s :: ExchangeDApp) -> Maybe (Redeemer s) -> Datum s -> [Token] -> Type) -> (Symbol -> [Token] -> Type) -> Type
+type DrainInputs :: InputsFor ExchangeDApp
 data DrainInputs s w = DrainInputs {
   exchange :: s 'CentralExchange ('Just '()) '() ['Token 1, 'Token 2]}
-type DrainOutputs :: (forall (s :: ExchangeDApp) -> Datum s -> [Token] -> Type) -> (Symbol -> [Token] -> Type) -> Type
+type DrainOutputs :: OutputsFor ExchangeDApp
 data DrainOutputs s w = DrainOutputs {
   authority :: w "Owner's wallet" ['Token 1, 'Token 2],
   exchange :: s 'CentralExchange '() '[]}
