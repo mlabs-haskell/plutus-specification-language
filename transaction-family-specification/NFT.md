@@ -10,7 +10,6 @@ module NFT where
 import Data.Kind (Type)
 import GHC.TypeLits (Symbol)
 import Numeric.Natural (Natural)
-import Ledger
 import Family
 
 type instance DApp (t :: TransactionFamily) = ExchangeDApp

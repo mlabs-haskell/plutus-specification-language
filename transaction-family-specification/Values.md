@@ -19,7 +19,7 @@ import Numeric.Natural (Natural)
 
 import Family
 import Family.Values
-import Ledger (POSIXTime (POSIXTime), PubKey, always)
+import Family.Ledger (POSIXTime (POSIXTime), PubKey, always)
 ~~~
 -->
 
