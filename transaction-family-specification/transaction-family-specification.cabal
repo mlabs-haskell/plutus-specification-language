@@ -1,5 +1,5 @@
 cabal-version:      2.4
-name:               families
+name:               transaction-family-specification
 version:            0.1.0.0
 
 -- A short (one-line) description of the package.
@@ -21,19 +21,26 @@ maintainer:         mario@mlabs.city
 -- category:
 extra-source-files: CHANGELOG.md
 
+library
+  exposed-modules:    Family, Family.Values, Family.Ledger, Family.Diagram, Family.Diagram.TH
+  default-language:   Haskell2010
+  build-depends:      base >= 4.15, bytestring, containers, text, template-haskell >= 2.17, fgl, graphviz >= 2999.10
+
 executable diagram
   main-is:            Diagram.lhs
-  other-modules:      Family, Family.Diagram, Family.Diagram.TH, Typed, HKD, NFT
+  other-modules:      Typed, HKD, NFT
+  hs-source-dirs:     doc
   ghc-options:        -pgmL markdown-unlit -main-is Diagram
-  build-depends:      base, bytestring, containers, text, template-haskell >= 2.18, fgl, graphviz >= 2999.10
+  build-depends:      base, template-haskell, graphviz, transaction-family-specification
   build-tool-depends: markdown-unlit:markdown-unlit
   default-language:   Haskell2010
 
 test-suite doc
   type:               exitcode-stdio-1.0
   main-is:            TransactionFamily.lhs
-  other-modules:      Family, Family.Values, Family.Diagram, Family.Diagram.TH, Family.Ledger, Typed, HKD, NFT, Diagram, Values
+  hs-source-dirs:     doc
+  other-modules:      Typed, HKD, NFT, Diagram, Values
   ghc-options:        -pgmL markdown-unlit
-  build-depends:      base, bytestring, containers, text, template-haskell >= 2.18, fgl, graphviz >= 2999.10
+  build-depends:      base, bytestring, containers, template-haskell, graphviz, transaction-family-specification
   build-tool-depends: markdown-unlit:markdown-unlit
   default-language:   Haskell2010

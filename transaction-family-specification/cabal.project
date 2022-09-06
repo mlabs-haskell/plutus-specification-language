@@ -1,0 +1,12 @@
+packages: ./.
+
+-- You never, ever, want this.
+write-ghc-environment-files: never
+
+-- Always build tests and benchmarks.
+tests: true
+benchmarks: true
+
+package families
+
+allow-newer: graphviz:bytestring
