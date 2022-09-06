@@ -10,8 +10,6 @@ module HKD where
 
 import Data.Functor.Const (Const (Const))
 import Data.Kind (Type)
-import Data.Map (Map)
-import qualified Data.Map as Map
 import GHC.TypeLits (Symbol)
 import Numeric.Natural (Natural)
 

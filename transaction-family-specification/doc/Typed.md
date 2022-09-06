@@ -8,7 +8,6 @@
 module Typed where
 
 import Data.Kind (Type)
-import Data.Map (Map)
 import Numeric.Natural (Natural)
 
 data POSIXTime

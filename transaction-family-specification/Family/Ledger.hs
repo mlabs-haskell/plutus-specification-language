@@ -1,5 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Ledger where
+module Family.Ledger where
 
 import Data.ByteString (ByteString)
 import Data.String (IsString)

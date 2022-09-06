@@ -11,8 +11,8 @@ import Data.Map (Map)
 import Data.Proxy (Proxy)
 import Numeric.Natural (Natural)
 import GHC.TypeLits (Symbol)
-import Family.Ledger (PubKey, Signature, SlotRange)
 import Family (Ada(Ada), Datum, Economy, Redeemer, MintRedeemer, MintedToken, Transaction(Inputs, Mints, Outputs))
+import Family.Ledger (PubKey, Signature, SlotRange, POSIXTime, always)
 
 type DatumSpecimen :: forall script -> Datum script -> Type
 type family DatumSpecimen s :: Datum s -> Type

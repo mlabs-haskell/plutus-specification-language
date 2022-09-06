@@ -8,7 +8,6 @@ modules in order to automatically generate various diagrams of our transactions 
 module Diagram where
 
 import Control.Concurrent (forkIO)
-import qualified Data.Map as Map
 import Family.Diagram (
   TransactionTypeDiagram,
   OverlayMode (Distinct, Parallel, Serial),
