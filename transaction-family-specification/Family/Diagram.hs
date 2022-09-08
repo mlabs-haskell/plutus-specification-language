@@ -207,27 +207,27 @@ transactionTypeGraph
   nodes =
     (transactionNode, TransactionNamed transactionName)
     : (isNodes <> osNodes <> iwNodes <> owNodes <> mpNodes <> scriptNodes <> walletNodes)
-  edges = [ (n, transactionNode, foldMap (<> "@") redeemer <> name)
-          | (name, InputFromScript{fromScript, redeemer, datum, currencies}) <- Map.toList scriptInputs,
-            let [(n, _)] = filter ((ScriptUTxO fromScript datum currencies ==) . snd) isNodes]
-       <> [ (n, transactionNode, name)
-          | (name, Wallet w currencies) <- Map.toList walletInputs,
-            let [(n, _)] = filter ((WalletUTxO w currencies ==) . snd) iwNodes]
-       <> [ (transactionNode, n, name)
-          | (name, OutputToScript{toScript, datum, currencies}) <- Map.toList scriptOutputs,
-            let [(n, _)] = filter ((ScriptUTxO toScript datum currencies ==) . snd) osNodes]
-       <> [ (transactionNode, n, name)
-          | (name, Wallet w currencies) <- Map.toList walletOutputs,
-            let [(n, _)] = filter ((WalletUTxO w currencies ==) . snd) owNodes]
-       <>  [ (transactionNode, n, redeemer <> " -> " <> currenciesLabel currencies)
-          | (name, MintOrBurn mp redeemer currencies) <- Map.toList mints,
-            let [(n, _)] = filter ((MintingPolicyNamed mp ==) . snd) mpNodes]
-       <> [ (scriptNode, n, "")
-          | (n, ScriptUTxO name _ _) <- isNodes <> osNodes,
-            let [(scriptNode, _)] = filter ((ValidatorScriptNamed name ==) . snd) scriptNodes]
-       <> [ (walletNode, n, "")
-          | (n, WalletUTxO name _) <- iwNodes <> owNodes,
-            let [(walletNode, _)] = filter ((WalletNamed name ==) . snd) walletNodes]
+  edges = concat [
+    zipWith
+      (\(name, InputFromScript{redeemer}) (n, _) -> (n, transactionNode, foldMap (<> "@") redeemer <> name))
+      (Map.toList scriptInputs)
+      isNodes,
+    [ (n, transactionNode, name)
+    | (name, Wallet w currencies) <- Map.toList walletInputs,
+      let [(n, _)] = filter ((WalletUTxO w currencies ==) . snd) iwNodes],
+    zipWith (\(name, OutputToScript{}) (n, _) -> (transactionNode, n, name)) (Map.toList scriptOutputs) osNodes,
+    [ (transactionNode, n, name)
+    | (name, Wallet w currencies) <- Map.toList walletOutputs,
+      let [(n, _)] = filter ((WalletUTxO w currencies ==) . snd) owNodes],
+    [ (transactionNode, n, redeemer <> " -> " <> currenciesLabel currencies)
+    | (name, MintOrBurn mp redeemer currencies) <- Map.toList mints,
+      let [(n, _)] = filter ((MintingPolicyNamed mp ==) . snd) mpNodes],
+    [ (scriptNode, n, "")
+    | (n, ScriptUTxO name _ _) <- isNodes <> osNodes,
+      let [(scriptNode, _)] = filter ((ValidatorScriptNamed name ==) . snd) scriptNodes],
+    [ (walletNode, n, "")
+    | (n, WalletUTxO name _) <- iwNodes <> owNodes,
+      let [(walletNode, _)] = filter ((WalletNamed name ==) . snd) walletNodes]]
   transactionNode = nodeTypeRange*startIndex
   isNodes =
     [ (nodeTypeRange*n+1, ScriptUTxO fromScript datum currencies)
