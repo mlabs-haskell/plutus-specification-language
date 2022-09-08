@@ -176,7 +176,7 @@ typeDescription vars (TH.AppT t (TH.VarT v)) =
        Just (Just t, _) -> error ("Can't describe variable type " <> TH.pprint t)
 typeDescription vars (TH.AppT a b) = typeDescription vars a <> " " <> typeDescription vars b
 typeDescription vars (TH.SigT t _) = typeDescription vars t
-typeDescription _ t = error ("Can't describe type " <> TH.pprint t)
+typeDescription _ (TH.ConT name) = Text.pack (TH.nameBase name)
 
 lookupIndex :: Eq k => k -> [(k, v)] -> Maybe (v, Int)
 lookupIndex k = foldr f Nothing where
