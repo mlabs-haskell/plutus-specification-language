@@ -24,6 +24,7 @@ import Family.Diagram (
   Currency (..),
   )
 
+import Control.Applicative (empty)
 import Data.List (elemIndex)
 import Data.Map qualified as Map
 import Data.Maybe (mapMaybe)
@@ -33,7 +34,11 @@ import GHC.Stack (HasCallStack)
 import Language.Haskell.TH qualified as TH
 import Language.Haskell.TH.Syntax (liftTyped)
 
-type TypeReifier a = [(TH.Name, Maybe TH.Type)] -> TH.Type -> Maybe (TH.Code TH.Q a)
+-- | How many items to expend an example list to?
+listItems :: Int
+listItems = 3
+
+type TypeReifier a = [(TH.Name, Maybe TH.Type)] -> TH.Code TH.Q Text -> TH.Type -> [TH.Code TH.Q (Text, a)]
 
 untypedDiagramForTransactionType :: TH.Type -> TH.Q TH.Exp
 untypedDiagramForTransactionType = TH.unTypeCode . diagramForTransactionType
@@ -78,18 +83,17 @@ reifyMapField t assocTypeName reifyType = TH.Code $ do
     [_] -> [] <$ TH.reportError ("Non-record data " <> TH.pprint tyConName <> " declaration")
     [] -> [] <$ TH.reportError ("Empty data " <> TH.pprint tyConName <> " declaration")
     _ -> [] <$ TH.reportError ("Multiple data " <> TH.pprint tyConName <> " constructors")
-  let reifyField :: TH.VarBangType -> Maybe (TH.Q (TH.TExp (Text, a)))
+  let reifyField :: TH.VarBangType -> [TH.Q (TH.TExp (Text, a))]
       reifyField (name, _, fieldType) =
-        TH.examineCode . (flip TH.bindCode $ addName name) . TH.examineCode
-        <$> reifyType varBindings fieldType
+        TH.examineCode <$> reifyType varBindings [|| Text.pack $$(stringLiteral $ TH.nameBase name) ||] fieldType
       addName :: TH.Name -> TH.TExp a -> TH.Code TH.Q (Text, a) 
       addName name a = [|| (Text.pack $$(stringLiteral $ TH.nameBase name), $$(TH.Code $ pure a)) ||]
       varBindings :: [(TH.Name, Maybe TH.Type)]
       varBindings = zip (unKind <$> tyVars) (map Just typeArgs <> repeat Nothing)
-  sequenceExps $ sequenceA $ mapMaybe reifyField fields
+  sequenceExps $ sequenceA $ foldMap reifyField fields
 
 reifyScriptInput :: HasCallStack => TypeReifier InputFromScript
-reifyScriptInput vars
+reifyScriptInput vars fieldName
   (TH.AppT
     (TH.AppT
       (TH.AppT
@@ -97,55 +101,93 @@ reifyScriptInput vars
         optRedeemerType)
       datumType)
     currencies)
-  | _wallet : (scriptVar, _) : _ <- reverse vars, s == scriptVar = Just
+  | _wallet : (scriptVar, _) : _ <- reverse vars, s == scriptVar = pure
     [||
+      (
+        $$fieldName,
       InputFromScript
         $$(textLiteral $ typeDescription vars scriptType)
         $$(maybeTypeDescriptionQuote vars optRedeemerType)
         $$(textLiteral $ typeDescription vars datumType)
         $$(currencyDescriptionQuotes vars currencies)
+      )
     ||]
-reifyScriptInput _ _ = Nothing
+reifyScriptInput vars fieldName (TH.AppT TH.ListT itemType) = reifyList reifyScriptInput vars fieldName itemType
+reifyScriptInput vars fieldName (TH.AppT (TH.AppT (TH.VarT w) name) currencies)
+  | (walletVar, _) : _ <- reverse vars, w == walletVar = empty
+reifyScriptInput vars _ t = error (Text.unpack (typeDescription vars t) <> ":\n" <> show t)
 
 reifyWallet :: HasCallStack => TypeReifier Wallet
-reifyWallet vars (TH.AppT (TH.AppT (TH.VarT w) name) currencies)
-  | (walletVar, _) : _ <- reverse vars, w == walletVar = Just
+reifyWallet vars fieldName (TH.AppT (TH.AppT (TH.VarT w) name) currencies)
+  | (walletVar, _) : _ <- reverse vars, w == walletVar = pure
     [||
-      Wallet $$(textLiteral $ typeDescription vars name) $$(currencyDescriptionQuotes vars currencies)
+      ($$fieldName, Wallet $$(textLiteral $ typeDescription vars name) $$(currencyDescriptionQuotes vars currencies))
     ||]
-reifyWallet _ _ = Nothing
+reifyWallet vars fieldName (TH.AppT TH.ListT itemType) = reifyList reifyWallet vars fieldName itemType
+reifyWallet vars fieldName
+  (TH.AppT
+    (TH.AppT
+      (TH.AppT
+        (TH.AppT (TH.VarT s) scriptType)
+        optRedeemerType)
+      datumType)
+    currencies)
+  | _wallet : (scriptVar, _) : _ <- reverse vars, s == scriptVar = empty
+reifyWallet vars fieldName
+  (TH.AppT
+    (TH.AppT
+      (TH.AppT (TH.VarT s) scriptType)
+      datumType)
+    currencies)
+  | _wallet : (scriptVar, _) : _ <- reverse vars, s == scriptVar = empty
+reifyWallet vars _ t = error (Text.unpack (typeDescription vars t) <> ":\n" <> show t)
 
 reifyScriptOutput :: HasCallStack => TypeReifier OutputToScript
-reifyScriptOutput vars
+reifyScriptOutput vars fieldName
   (TH.AppT
     (TH.AppT
      (TH.AppT (TH.VarT s) scriptType)
      datumType)
     currencies)
-  | _wallet : (scriptVar, _) : _ <- reverse vars, s == scriptVar = Just
+  | _wallet : (scriptVar, _) : _ <- reverse vars, s == scriptVar = pure
     [||
+      (
+        $$fieldName,
       OutputToScript
         $$(textLiteral $ typeDescription vars scriptType)
         $$(textLiteral $ typeDescription vars datumType)
         $$(currencyDescriptionQuotes vars currencies)
+      )
     ||]
-reifyScriptOutput _ _ = Nothing
+reifyScriptOutput vars fieldName (TH.AppT TH.ListT itemType) = reifyList reifyScriptOutput vars fieldName itemType
+reifyScriptOutput vars fieldName (TH.AppT (TH.AppT (TH.VarT w) name) currencies)
+  | (walletVar, _) : _ <- reverse vars, w == walletVar = empty
+reifyScriptOutput vars _ t = error (Text.unpack (typeDescription vars t) <> ":\n" <> show t)
 
 reifyMint :: HasCallStack => TypeReifier MintOrBurn
-reifyMint vars
+reifyMint vars fieldName
   (TH.AppT
     (TH.AppT
      (TH.AppT (TH.VarT mp) scriptType)
      redeemerType)
     currencies)
-  | (mpVar, _) : _ <- reverse vars, mp == mpVar = Just
+  | (mpVar, _) : _ <- reverse vars, mp == mpVar = pure
     [||
+      (
+        $$fieldName,
       MintOrBurn
         $$(textLiteral $ typeDescription vars scriptType)
         $$(textLiteral $ typeDescription vars redeemerType)
         $$(currencyDescriptionQuotes vars currencies)
+      )
     ||]
-reifyMint _ _ = Nothing
+reifyMint vars fieldName (TH.AppT TH.ListT itemType) = reifyList reifyMint vars fieldName itemType
+reifyMint vars _ t = error (Text.unpack (typeDescription vars t) <> ":\n" <> show t)
+
+reifyList :: TypeReifier t -> TypeReifier t
+reifyList reifyItem vars fieldName itemType = foldMap enumerateItem [1..listItems] where
+  enumerateItem n = reifyItem vars [|| $$(addSuffix fieldName n) ||] itemType
+  addSuffix prefix n = [|| $$prefix <> $$(TH.unsafeCodeCoerce $ TH.litE . TH.StringL $ " " <> show n) ||]
 
 currencyDescriptionQuotes :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q [Currency]
 currencyDescriptionQuotes vars =
@@ -177,6 +219,8 @@ typeDescription vars (TH.AppT t (TH.VarT v)) =
 typeDescription vars (TH.AppT a b) = typeDescription vars a <> " " <> typeDescription vars b
 typeDescription vars (TH.SigT t _) = typeDescription vars t
 typeDescription _ (TH.ConT name) = Text.pack (TH.nameBase name)
+typeDescription _ TH.ListT = "List of"
+typeDescription _ t = error (show t)
 
 lookupIndex :: Eq k => k -> [(k, v)] -> Maybe (v, Int)
 lookupIndex k = foldr f Nothing where
