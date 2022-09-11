@@ -60,8 +60,13 @@ library
 
   exposed-modules:
     PSL
+    PSL.Prettyprint
     MonoidDo
 
   build-depends:
     , base
+    , generics-sop
     , plutarch-core
+    , prettyprinter
+    , text
+    , transformers

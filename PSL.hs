@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
+{-# OPTIONS_GHC -Wno-partial-fields #-}
 
 module PSL where
 
@@ -18,12 +19,13 @@ data PBool (ef :: PTypeF) = PTrue | PFalse
 x :: PConstructable edsl PBool => Term edsl PBool
 x = pcon PTrue
 
--- | Newtype used to conveniently give a datatype the 'PReprPrimitive'
--- representation. Not intended to be used directly!
---
--- @
--- data PSth (ef :: PTypeF) ... deriving (PHasRepr) via (PIsPrimitive)
--- @
+{- | Newtype used to conveniently give a datatype the 'PReprPrimitive'
+ representation. Not intended to be used directly!
+
+ @
+ data PSth (ef :: PTypeF) ... deriving (PHasRepr) via (PIsPrimitive)
+ @
+-}
 data PIsPrimitive (ef :: PTypeF)
 
 instance PHasRepr PIsPrimitive where
@@ -51,10 +53,6 @@ data PDCert (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
 
 data PByteString (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
 
--- data PList (a :: PType) (ef :: PTypeF) = PList [ef /$ a]
---   deriving stock (Generic)
---   deriving anyclass (PHasRepr)
-
 data PData (ef :: PTypeF)
   = PDataConstr (Pf ef PInteger) (Pf ef (PList PData))
   | PDataMap (Pf ef (PList (PPair PData PData)))
@@ -64,8 +62,8 @@ data PData (ef :: PTypeF)
   deriving (PHasRepr) via (PIsPrimitive)
 
 data POwnUTXO d (ef :: PTypeF) = POwnUTXO
-  { value :: Pf ef PValue,
-    datum :: Pf ef d
+  { value :: Pf ef PValue
+  , datum :: Pf ef d
   }
   deriving stock (Generic)
   deriving anyclass (PHasRepr)
@@ -76,19 +74,13 @@ class (forall a. PConstructable edsl a => PConstructable edsl (f a)) => PConstru
 
 instance (forall a. PConstructable edsl a => PConstructable edsl (f a)) => PConstructable2 edsl f
 
-data PListF a self ef
+data PList a ef
   = PNil
-  | PCons (Pf ef a) (Pf ef self)
-  deriving stock (Generic)
-  deriving anyclass (PHasRepr)
-
-newtype PList a ef = PList (Pf ef (PFix (PListF a)))
-  deriving stock (Generic)
-  deriving anyclass (PHasRepr)
+  | PCons (ef /$ a) (ef /$ PList a)
+  deriving (PHasRepr) via (PIsPrimitive)
 
 data PNat f = PZ | PS (Pf f PNat)
-  deriving stock (Generic)
-  deriving anyclass (PHasRepr)
+  deriving (PHasRepr) via (PIsPrimitive)
 
 instance PConstructable edsl PNat => Num (Term edsl PNat) where
   fromInteger 0 = pcon PZ
@@ -96,23 +88,26 @@ instance PConstructable edsl PNat => Num (Term edsl PNat) where
   fromInteger _ = error "negative"
 
 class
-  ( forall d. Monoid (Term edsl (PDiagram d)),
-    (forall d. IsPType edsl d => IsPType edsl (PDiagram d)),
-    Monoid (Term edsl PValue),
-    PDSL edsl,
-    PSOP edsl,
-    IsPType edsl PInteger,
-    forall f. PConstructable2 edsl f => PConstructable edsl (PFix f),
-    IsPType edsl PValue,
-    IsPType edsl PUTXO,
-    IsPType edsl PUTXORef,
-    IsPType edsl PTokenName,
-    IsPType edsl PCurrencySymbol,
-    IsPType edsl PTimeRange,
-    IsPType edsl PPubKeyHash,
-    IsPType edsl PAddress,
-    IsPType edsl PDCert,
-    PConstructable edsl PData
+  ( forall d. Monoid (Term edsl (PDiagram d))
+  , (forall d. IsPType edsl d => IsPType edsl (PDiagram d))
+  , Monoid (Term edsl PValue)
+  , PDSL edsl
+  , PSOP edsl
+  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructable' edsl (a #-> b)
+  , IsPType edsl PInteger
+  , -- forall f. PConstructable2 edsl f => PConstructable edsl (PFix f),
+    IsPType edsl PValue
+  , IsPType edsl PUTXO
+  , IsPType edsl PUTXORef
+  , IsPType edsl PTokenName
+  , IsPType edsl PCurrencySymbol
+  , IsPType edsl PTimeRange
+  , IsPType edsl PPubKeyHash
+  , IsPType edsl PAddress
+  , IsPType edsl PDCert
+  , PConstructable edsl PNat
+  , PConstructable edsl PData
+  , forall a. IsPType edsl a => PConstructable edsl (PList a)
   ) =>
   PPSL edsl
   where
@@ -149,9 +144,9 @@ class Protocol p d | p -> d where
   specification :: Proxy p -> Specification d
 
 data CounterDatum f = CounterDatum
-  { counter :: Pf f PNat,
-    addr :: Pf f PAddress,
-    datum :: Pf f PData
+  { counter :: Pf f PNat
+  , addr :: Pf f PAddress
+  , datum :: Pf f PData
   }
   deriving stock (Generic)
   deriving anyclass (PHasRepr)
@@ -226,7 +221,7 @@ maksCases c = pmatch c \case
   MaksConsume {ada, ada'} -> MonoidDo.do
     requireOwnInput $ pcon $ POwnUTXO (mkAda ada) (pcon MaksA)
     requireOwnInput $ pcon $ POwnUTXO (mkAda ada') (pcon MaksB)
-    createOutput $ toProtocol (Proxy @CounterProtocol) (pcon $ CounterDatum 100 (fromPkh pkh) (pcon $ PDataList $ pcon $ PList $ pcon $ PFix $ pcon PNil)) (mkAda ada <> mkAda ada')
+    createOutput $ toProtocol (Proxy @CounterProtocol) (pcon $ CounterDatum 100 (fromPkh pkh) (pcon $ PDataList $ pcon $ PNil)) (mkAda ada <> mkAda ada')
 
 data MaksProtocol
 
