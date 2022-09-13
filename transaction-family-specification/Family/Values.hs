@@ -11,7 +11,7 @@ import Data.Map (Map)
 import Data.Proxy (Proxy)
 import Numeric.Natural (Natural)
 import GHC.TypeLits (Symbol)
-import Family (Ada(Ada), Datum, Economy, Redeemer, MintRedeemer, MintedToken, Transaction(Inputs, Mints, Outputs))
+import Family (Ada(Ada), Datum, Economy, Redeemer, MintOf, MintRedeemer, Transaction(Inputs, Mints, Outputs))
 import Family.Ledger (PubKey, Signature, SlotRange, POSIXTime, always)
 
 type DatumSpecimen :: forall script -> Datum script -> Type
@@ -34,7 +34,7 @@ data TxInputSpecimen s r d e where
   TxInputSpendingSpecimen :: TxOutSpecimen s d e -> RedeemerSpecimen s r -> TxInputSpecimen s ('Just r) d e
   TxInputReferenceSpecimen :: TxOutSpecimen s d e -> TxInputSpecimen s 'Nothing d e
 
-type TxMintSpecimen :: forall (mp :: policy) -> MintRedeemer mp -> [MintedToken mp] -> Type
+type TxMintSpecimen :: forall (mp :: policy) -> MintRedeemer mp -> [MintOf mp] -> Type
 data TxMintSpecimen mp r e = TxMintSpecimen {
   txMintValue :: Value e}
 

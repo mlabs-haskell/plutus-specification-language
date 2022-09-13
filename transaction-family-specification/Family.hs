@@ -4,7 +4,7 @@
 module Family where
 
 import Data.Kind (Type)
-import GHC.TypeLits (Symbol)
+import GHC.TypeLits (Natural, Symbol)
 
 class ValidatorScript s where
   type Currencies s :: [k]
@@ -21,11 +21,13 @@ type family DApp t
 type Economy :: dapp -> Type
 type family Economy t
 
+data MintOf mp = Mint Natural (MintedToken mp) | Burn Natural (MintedToken mp) | MintOrBurn (MintedToken mp)
+
 type InputFromScriptToTransaction t =
   forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> [Economy (DApp t)] -> Type
 type OutputToScriptFromTransaction t =
   forall (s :: DApp t) -> Datum s -> [Economy (DApp t)] -> Type
-type MintForTransaction t = forall (mp :: DApp t) -> MintRedeemer mp -> [MintedToken mp] -> Type
+type MintForTransaction t = forall (mp :: DApp t) -> MintRedeemer mp -> [MintOf mp] -> Type
 type WalletUTxOFor dapp = Symbol -> [Economy dapp] -> Type
 
 class Transaction (t :: familie) where
@@ -34,12 +36,12 @@ class Transaction (t :: familie) where
   type Outputs t :: OutputToScriptFromTransaction t -> WalletUTxOFor (DApp t) -> Type
   type Mints t = NoMints (DApp t)
 
-type NoMints :: forall k -> (forall (mp :: k) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
+type NoMints :: forall k -> (forall (mp :: k) -> MintRedeemer mp -> [MintOf mp] -> Type) -> Type
 data NoMints t mp = NoMints
 
 -- type/kind synonyms to simplify the kind signatures in specifications 
 type InputsFor dapp = (forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> [Economy dapp] -> Type) -> (Symbol -> [Economy dapp] -> Type) -> Type
-type MintsFor dapp = (forall (mp :: dapp) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
+type MintsFor dapp = (forall (mp :: dapp) -> MintRedeemer mp -> [MintOf mp] -> Type) -> Type
 type OutputsFor dapp = (forall (s :: dapp) -> Datum s -> [Economy dapp] -> Type) -> (Symbol -> [Economy dapp] -> Type) -> Type
 
 data Ada = Ada

@@ -55,7 +55,7 @@ data InitializeInputs s w = InitializeInputs {
   nftSource :: w "Owner's wallet" '[]}
 type InitializeMints :: MintsFor ExchangeDApp
 data InitializeMints mp = InitializeMints {
-  authorization :: mp 'AuthorizingMint '() '[ 'AuthNFT ]}
+  authorization :: mp 'AuthorizingMint '() '[ 'Mint 1 'AuthNFT ]}
 type InititalizeOutputs :: OutputsFor ExchangeDApp
 data InititalizeOutputs s w = InititalizeOutputs {
   exchange :: s 'CentralExchange '() '[ 'Minted 'AuthNFT ]}
