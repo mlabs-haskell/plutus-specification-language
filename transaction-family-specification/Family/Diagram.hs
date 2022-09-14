@@ -2,7 +2,7 @@
 
 module Family.Diagram where
 
-import Family (Transaction)
+import Family (Transaction, MintQuantity (Burn, BurnSome, Mint, MintOrBurnSome, MintSome))
 import Control.Arrow ((&&&))
 import Data.Bifunctor (first, second)
 import Data.Kind (Type)
@@ -24,7 +24,7 @@ import Data.GraphViz (
   GraphvizParams(clusterBy, clusterID, fmtCluster, fmtEdge, fmtNode, globalAttributes, isDotCluster),
   NodeCluster (C, N), GraphID (Num), Number (Int),
   defaultParams, graphToDot, preview, runGraphviz, runGraphvizCanvas', toLabel)
-import Data.GraphViz.Attributes (dashed, diamond, style)
+import Data.GraphViz.Attributes (crow, dashed, diamond, style)
 import Data.GraphViz.Attributes.Complete (
   Attribute (ArrowHead, ArrowTail, Shape, Weight),
   Shape (DoubleOctagon, InvTrapezium))
@@ -51,7 +51,7 @@ data OutputToScript = OutputToScript {
 data MintOrBurn = MintOrBurn {
   mintingPolicy :: Text,
   redeemer :: Text,
-  currencies :: [Currency]}
+  effects :: [MintQuantity Currency]}
 
 data Wallet = Wallet {
   walletName :: Text,
@@ -106,7 +106,10 @@ transactionGraphToDot caption g = graphToDot params g' where
       toLabel l
       : if isTransaction dest && nodeType src == TransactionInputFromWallet then [Weight $ Int 0]
         else if isTransaction dest && isScriptUTxO src && not ('@' `Text.elem` l) then [style dashed]
-        else if isTransaction src && nodeType dest == MintingPolicy then [ArrowHead diamond, ArrowTail diamond]
+        else if isTransaction src && nodeType dest == MintingPolicy
+             then if "@ mint or burn" `Text.isInfixOf` l then [ArrowHead diamond]
+             else if "@ mint" `Text.isInfixOf` l then [ArrowHead crow]
+             else []
         else []}
   clustering :: (Int, Text) -> NodeCluster Int (Int, Text)
   clustering (n, name)
@@ -142,6 +145,14 @@ nodeLabel (WalletUTxO _ currencies) = currenciesLabel currencies
 
 currenciesLabel :: [Currency] -> Text
 currenciesLabel = Text.intercalate ", " . map currencyName
+
+mintsLabel :: [MintQuantity Currency] -> Text
+mintsLabel = Text.intercalate ", " . map describe where
+  describe (Burn n c) = Text.pack ("burn " <> shows n " ") <> currencyName c
+  describe (Mint n c) = Text.pack ("mint " <> shows n " ") <> currencyName c
+  describe (BurnSome c) = Text.pack ("burn ") <> currencyName c
+  describe (MintSome c) = Text.pack ("mint ") <> currencyName c
+  describe (MintOrBurnSome c) = Text.pack ("mint or burn ") <> currencyName c
 
 transactionTypeFamilyGraph :: OverlayMode -> [TransactionTypeDiagram] -> Gr NodeId Text
 transactionTypeFamilyGraph mode = mergeGraphs . foldl' addTx (0, []) where
@@ -219,8 +230,8 @@ transactionTypeGraph
     [ (transactionNode, n, name)
     | (name, Wallet w currencies) <- Map.toList walletOutputs,
       let [(n, _)] = filter ((WalletUTxO w currencies ==) . snd) owNodes],
-    [ (transactionNode, n, redeemer <> " -> " <> currenciesLabel currencies)
-    | (name, MintOrBurn mp redeemer currencies) <- Map.toList mints,
+    [ (transactionNode, n, redeemer <> " @ " <> mintsLabel effects)
+    | (name, MintOrBurn mp redeemer effects) <- Map.toList mints,
       let [(n, _)] = filter ((MintingPolicyNamed mp ==) . snd) mpNodes],
     [ (scriptNode, n, "")
     | (n, ScriptUTxO name _ _) <- isNodes <> osNodes,

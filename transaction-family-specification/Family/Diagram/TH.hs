@@ -13,7 +13,7 @@
 
 module Family.Diagram.TH (diagramForTransactionType, untypedDiagramForTransactionType) where
 
-import Family (Transaction (Inputs, Mints, Outputs))
+import Family (Transaction (Inputs, Mints, Outputs), MintQuantity (Burn, BurnSome, Mint, MintOrBurnSome, MintSome))
 import Family.Diagram qualified as D
 import Family.Diagram (
   TransactionTypeDiagram (..),
@@ -31,6 +31,7 @@ import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Stack (HasCallStack)
+import GHC.TypeLits (Natural)
 import Language.Haskell.TH qualified as TH
 import Language.Haskell.TH.Syntax (liftTyped)
 
@@ -170,7 +171,7 @@ reifyMint vars fieldName
     (TH.AppT
      (TH.AppT (TH.VarT mp) scriptType)
      redeemerType)
-    currencies)
+    quantities)
   | (mpVar, _) : _ <- reverse vars, mp == mpVar = pure
     [||
       (
@@ -178,11 +179,34 @@ reifyMint vars fieldName
       MintOrBurn
         $$(textLiteral $ typeDescription vars scriptType)
         $$(textLiteral $ typeDescription vars redeemerType)
-        $$(currencyDescriptionQuotes vars currencies)
+        $$(quantitiesDescriptionQuote vars quantities)
       )
     ||]
 reifyMint vars fieldName (TH.AppT TH.ListT itemType) = reifyList reifyMint vars fieldName itemType
 reifyMint vars _ t = error (Text.unpack (typeDescription vars t) <> ":\n" <> show t)
+
+quantitiesDescriptionQuote ::
+  HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q [MintQuantity Currency]
+quantitiesDescriptionQuote vars = TH.unsafeCodeCoerce . fmap TH.ListE . mapM TH.unTypeCode . quantityDescriptions vars
+
+quantityDescriptions :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> [TH.Code TH.Q (MintQuantity Currency)]
+quantityDescriptions vars (TH.AppT (TH.AppT TH.PromotedConsT t) ts) =
+  quantityDescription vars t : quantityDescriptions vars ts
+quantityDescriptions vars TH.PromotedNilT = []
+quantityDescriptions vars (TH.SigT t _) = quantityDescriptions vars t
+
+quantityDescription :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q (MintQuantity Currency)
+quantityDescription vars (TH.AppT (TH.PromotedT name) t)
+  | name == 'MintOrBurnSome = currency [|| MintOrBurnSome ||]
+  | name == 'MintSome = currency [|| MintSome ||]
+  | name == 'BurnSome = currency [|| BurnSome ||]
+  where currency :: TH.Code TH.Q (Currency -> MintQuantity Currency) -> TH.Code TH.Q (MintQuantity Currency)
+        currency name = [|| $$name (Currency $$(TH.unsafeCodeCoerce $ TH.litE $ TH.StringL $ Text.unpack $ typeDescription vars t)) ||]
+quantityDescription vars (TH.AppT (TH.AppT (TH.PromotedT name) (TH.LitT (TH.NumTyLit n))) t)
+  | name == 'Mint = currency [|| Mint ||]
+  | name == 'Burn = currency [|| Burn ||]
+  where currency :: TH.Code TH.Q (Natural -> Currency -> MintQuantity Currency) -> TH.Code TH.Q (MintQuantity Currency)
+        currency name = [|| $$name $$(TH.unsafeCodeCoerce $ TH.litE $ TH.IntegerL n) (Currency $$(TH.unsafeCodeCoerce $ TH.litE $ TH.StringL $ Text.unpack $ typeDescription vars t)) ||]
 
 reifyList :: TypeReifier t -> TypeReifier t
 reifyList reifyItem vars fieldName itemType = foldMap enumerateItem [1..listItems] where
