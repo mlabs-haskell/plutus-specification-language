@@ -56,11 +56,11 @@ data InitializeInputs s w = InitializeInputs {
 type InitializeMints :: MintsFor ExchangeDApp
 data InitializeMints mp = InitializeMints {
   authorization :: mp 'AuthorizingMint '() '[ 'Mint 1 'AuthNFT ]}
-type InititalizeOutputs :: OutputsFor ExchangeDApp
-data InititalizeOutputs s w = InititalizeOutputs {
+type InitializeOutputs :: OutputsFor ExchangeDApp
+data InitializeOutputs s w = InitializeOutputs {
   exchange :: s 'CentralExchange '() '[ 'Minted 'AuthNFT ]}
 instance Transaction 'Initialize where
   type Inputs 'Initialize = InitializeInputs
   type Mints 'Initialize = InitializeMints
-  type Outputs 'Initialize = InititalizeOutputs
+  type Outputs 'Initialize = InitializeOutputs
 ~~~

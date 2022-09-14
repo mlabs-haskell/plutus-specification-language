@@ -13,11 +13,12 @@ import Family.Diagram (
   OverlayMode (Distinct, Parallel, Serial),
   transactionGraphToDot, transactionTypeGraph, transactionTypeFamilyGraph)
 import Data.GraphViz (
-  GraphvizCanvas (Xlib), GraphvizOutput (Canon, DotOutput),
+  GraphvizCanvas (Xlib), GraphvizOutput (Canon, DotOutput, Svg),
   runGraphviz, runGraphvizCanvas')
 import qualified Language.Haskell.TH as TH
 import Family.Diagram.TH (diagramForTransactionType, untypedDiagramForTransactionType)
 import qualified HKD
+import qualified Legend
 ~~~
 
 First we generate some diagrams using Template Haskell splices from `Family.Diagram.TH`:
@@ -27,11 +28,13 @@ update, exchange, drain :: TransactionTypeDiagram
 update = $( [t| 'HKD.UpdateOracle 1 |] >>= untypedDiagramForTransactionType)
 exchange = $( [t| 'HKD.Exchange 1 2 |] >>= untypedDiagramForTransactionType)
 drain = $$(diagramForTransactionType $ TH.PromotedT $ TH.mkName "HKD.DrainCollectedFees")
+legend = $$(diagramForTransactionType $ TH.PromotedT $ TH.mkName "Legend.Transaction")
 ~~~
 
-Then we can convert the diagrams to GraphViz either on their own, or combining multiple transaction types in a single
-graph. There are three different modes of combinations: `Distinct`, `Parallel`, and `Serial`. The serial mode appears
-to be most intuitive.
+The function `diagramForTransactionType` and `untypedDiagramForTransactionType` generate a Template Haskell quote for
+an expression of type `TransactionTypeDiagram`, which we can also generate manually if needed. Then we can convert the
+diagrams to GraphViz either on their own, or combining multiple transaction types in a single graph. There are three
+different modes of combinations: `Distinct`, `Parallel`, and `Serial`. The serial mode appears to be most intuitive.
 
 ~~~ {.haskell}
 main = do
@@ -43,4 +46,5 @@ main = do
   forkIO (runGraphvizCanvas' g3 Xlib)
   forkIO (runGraphvizCanvas' g4 Xlib)
   runGraphviz g4 Canon "update-exchange-drain.dot"
+  runGraphviz (transactionGraphToDot "Legend" (transactionTypeGraph 0 legend)) Svg "legend.svg"
 ~~~

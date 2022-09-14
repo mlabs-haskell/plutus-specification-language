@@ -28,7 +28,7 @@ library
 
 executable diagram
   main-is:            Diagram.lhs
-  other-modules:      Typed, HKD, NFT
+  other-modules:      Typed, HKD, NFT, Legend
   hs-source-dirs:     doc
   ghc-options:        -pgmL markdown-unlit -main-is Diagram
   build-depends:      base, template-haskell, graphviz, transaction-family-specification
