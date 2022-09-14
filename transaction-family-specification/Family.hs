@@ -21,7 +21,11 @@ type family DApp t
 type Economy :: dapp -> Type
 type family Economy t
 
-data MintOf mp = Mint Natural (MintedToken mp) | Burn Natural (MintedToken mp) | MintOrBurn (MintedToken mp)
+data MintOf mp = Mint Natural (MintedToken mp)
+               | Burn Natural (MintedToken mp)
+               | MintSome (MintedToken mp)
+               | BurnSome (MintedToken mp)
+               | MintOrBurnSome (MintedToken mp)
 
 type InputFromScriptToTransaction t =
   forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> [Economy (DApp t)] -> Type
