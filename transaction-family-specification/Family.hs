@@ -36,15 +36,24 @@ data MintQuantity currency
   | BurnSome currency
   | MintOrBurnSome currency
 
+type ValueKnownBy dapp = [Quantity (Economy dapp)]
+
+data Quantity currency
+  = Exactly Natural currency
+  | AtLeast Natural currency
+  | AtMost Natural currency
+  | Some currency
+  | AnythingElse
+
 type InputFromScriptToTransaction t =
-  forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> [Economy (DApp t)] -> Type
+  forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy (DApp t) -> Type
 
 type OutputToScriptFromTransaction t =
-  forall (s :: DApp t) -> Datum s -> [Economy (DApp t)] -> Type
+  forall (s :: DApp t) -> Datum s -> ValueKnownBy (DApp t) -> Type
 
 type MintForTransaction t = forall (mp :: DApp t) -> MintRedeemer mp -> [MintOf mp] -> Type
 
-type WalletUTxOFor dapp = Symbol -> [Economy dapp] -> Type
+type WalletUTxOFor dapp = Symbol -> ValueKnownBy dapp -> Type
 
 class Transaction (t :: familie) where
   type Inputs t :: InputFromScriptToTransaction t -> WalletUTxOFor (DApp t) -> Type
@@ -56,10 +65,10 @@ type NoMints :: forall k -> (forall (mp :: k) -> MintRedeemer mp -> [MintOf mp] 
 data NoMints t mp = NoMints
 
 -- type/kind synonyms to simplify the kind signatures in specifications
-type InputsFor dapp = (forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> [Economy dapp] -> Type) -> (Symbol -> [Economy dapp] -> Type) -> Type
+type InputsFor dapp = (forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy dapp -> Type) -> (Symbol -> ValueKnownBy dapp -> Type) -> Type
 
 type MintsFor dapp = (forall (mp :: dapp) -> MintRedeemer mp -> [MintOf mp] -> Type) -> Type
 
-type OutputsFor dapp = (forall (s :: dapp) -> Datum s -> [Economy dapp] -> Type) -> (Symbol -> [Economy dapp] -> Type) -> Type
+type OutputsFor dapp = (forall (s :: dapp) -> Datum s -> ValueKnownBy dapp -> Type) -> (Symbol -> ValueKnownBy dapp -> Type) -> Type
 
 data Ada = Ada

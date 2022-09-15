@@ -15,7 +15,8 @@ import Data.Functor.Const (Const)
 import Data.Kind (Type)
 import Data.Map (Map)
 import Data.Proxy (Proxy)
-import Family (Ada (Ada), Datum, Economy, MintOf, MintRedeemer, Redeemer, Transaction (Inputs, Mints, Outputs))
+import Family (Ada (Ada), Datum, Economy, MintOf, MintRedeemer, Redeemer, Transaction (Inputs, Mints, Outputs),
+               ValueKnownBy)
 import Family.Ledger (POSIXTime, PubKey, Signature, SlotRange, always)
 import GHC.TypeLits (Symbol)
 import Numeric.Natural (Natural)
@@ -36,7 +37,7 @@ data TxSpecimen t = TxSpecimen
     txSignatures :: Map PubKey Signature
   }
 
-type TxInputSpecimen :: forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> [Economy dapp] -> Type
+type TxInputSpecimen :: forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy dapp -> Type
 data TxInputSpecimen s r d e where
   TxInputSpendingSpecimen :: TxOutSpecimen s d e -> RedeemerSpecimen s r -> TxInputSpecimen s ('Just r) d e
   TxInputReferenceSpecimen :: TxOutSpecimen s d e -> TxInputSpecimen s 'Nothing d e
@@ -50,7 +51,7 @@ data WalletSpecimen name e = WalletSpecimen
   { walletPubKey :: PubKey
   }
 
-type TxOutSpecimen :: forall (s :: dapp) -> Datum s -> [Economy dapp] -> Type
+type TxOutSpecimen :: forall (s :: dapp) -> Datum s -> ValueKnownBy dapp -> Type
 data TxOutSpecimen s d e = TxOutSpecimen
   { txOutDatum :: DatumSpecimen s d,
     txOutValue :: Value e

@@ -36,9 +36,13 @@ instance Family.MintingPolicyScript 'MintingPolicy where
 
 type TransactionInputs :: Family.InputsFor DApp
 data TransactionInputs s w = TransactionInputs
-  { scriptReferenceInput :: s 'ValidatorScript 'Nothing 'ValidatorDatum '[ 'MintedToken 'MPToken, 'OtherToken],
-    scriptConsumedInput :: s 'ValidatorScript ('Just 'ValidatorRedeemer) 'ValidatorDatum '[ 'MintedToken 'MPToken, 'OtherToken],
-    walletInput :: w "Wallet" '[ 'MintedToken 'MPToken]
+  { scriptReferenceInput ::
+      s 'ValidatorScript 'Nothing 'ValidatorDatum
+        '[ 'Family.Some ('MintedToken 'MPToken), 'Family.Some 'OtherToken ],
+    scriptConsumedInput ::
+      s 'ValidatorScript ('Just 'ValidatorRedeemer) 'ValidatorDatum
+        '[ 'Family.Some ('MintedToken 'MPToken), 'Family.Some 'OtherToken ],
+    walletInput :: w "Wallet" '[ 'Family.Some ('MintedToken 'MPToken) ]
   }
 
 type TransactionMints :: Family.MintsFor DApp
@@ -48,8 +52,9 @@ data TransactionMints mp = TransactionMints
 
 type TransactionOutputs :: Family.OutputsFor DApp
 data TransactionOutputs s w = TransactionOutputs
-  { scriptOutput :: s 'ValidatorScript 'ValidatorDatum '[ 'MintedToken 'MPToken, 'OtherToken],
-    walletOutput :: w "Wallet" '[ 'OtherToken]
+  { scriptOutput ::
+      s 'ValidatorScript 'ValidatorDatum '[ 'Family.Some ('MintedToken 'MPToken), 'Family.Some 'OtherToken ],
+    walletOutput :: w "Wallet" '[ 'Family.Some 'OtherToken ]
   }
 
 instance Family.Transaction 'Transaction where

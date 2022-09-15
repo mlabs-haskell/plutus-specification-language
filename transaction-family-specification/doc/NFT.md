@@ -58,7 +58,7 @@ data InitializeMints mp = InitializeMints {
   authorization :: mp 'AuthorizingMint '() '[ 'Mint 1 'AuthNFT ]}
 type InitializeOutputs :: OutputsFor ExchangeDApp
 data InitializeOutputs s w = InitializeOutputs {
-  exchange :: s 'CentralExchange '() '[ 'Minted 'AuthNFT ]}
+  exchange :: s 'CentralExchange '() '[ 'Exactly 1 ('Minted 'AuthNFT) ]}
 instance Transaction 'Initialize where
   type Inputs 'Initialize = InitializeInputs
   type Mints 'Initialize = InitializeMints

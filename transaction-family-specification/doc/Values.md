@@ -124,39 +124,39 @@ exampleExchangeInput = TxInputSpendingSpecimen
     txOutValue = Value Destitute}
   (Const ())
   
-exampleExchangeOutput :: TxOutSpecimen 'CentralExchange '() ['Token 1, 'Token 2]
+exampleExchangeOutput :: TxOutSpecimen 'CentralExchange '() [ 'Some ('Token 1), 'Some ('Token 2) ]
 exampleExchangeOutput = TxOutSpecimen {
   txOutDatum = Const (),
-  txOutValue = Value (1 :$ Proxy @('Token 1) :+ 1 :$ Proxy @('Token 2))}
+  txOutValue = Value (1 :$ Proxy @('Some ('Token 1)) :+ 1 :$ Proxy @('Some ('Token 2)))}
 
-exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Nothing '() '[ 'Token 1 ]
+exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Nothing '() '[ 'Exactly 1 ('Token 1) ]
 exampleOracle1Input = TxInputReferenceSpecimen
   TxOutSpecimen {
     txOutDatum = OracleDatum {
       priceInLovelace = 45,
       maxTradeVolume = 5_000,
       expiry = 20_000_000},
-    txOutValue = Value (1 :$ Proxy @('Token 1))}
+    txOutValue = Value (1 :$ Proxy @('Exactly 1 ('Token 1)))}
 
-exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Nothing '() '[ 'Token 2 ]
+exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Nothing '() '[ 'Exactly 1 ('Token 2) ]
 exampleOracle2Input = TxInputReferenceSpecimen
   TxOutSpecimen {
     txOutDatum = OracleDatum {
       priceInLovelace = 60,
       maxTradeVolume = 10_000,
       expiry = 20_000_000},
-    txOutValue = Value (1 :$ Proxy @('Token 2))}
+    txOutValue = Value (1 :$ Proxy @('Exactly 1 ('Token 2)))}
 
-exampleWallet1Input :: WalletSpecimen "Wallet 1" '[ 'Token 1 ]
+exampleWallet1Input :: WalletSpecimen "Wallet 1" '[ 'Some ('Token 1) ]
 exampleWallet1Input = WalletSpecimen pubKey1
 
-exampleWallet1Output :: WalletSpecimen "Wallet 1" '[ 'Token 2 ]
+exampleWallet1Output :: WalletSpecimen "Wallet 1" '[ 'Some ('Token 2) ]
 exampleWallet1Output = WalletSpecimen pubKey1
 
-exampleWallet2Input :: WalletSpecimen "Wallet 2" '[ 'Token 2 ]
+exampleWallet2Input :: WalletSpecimen "Wallet 2" '[ 'Some ('Token 2) ]
 exampleWallet2Input = WalletSpecimen pubKey2
 
-exampleWallet2Output :: WalletSpecimen "Wallet 2" '[ 'Token 1 ]
+exampleWallet2Output :: WalletSpecimen "Wallet 2" '[ 'Some ('Token 1) ]
 exampleWallet2Output = WalletSpecimen pubKey2
 
 pubKey1, pubKey2 :: PubKey
