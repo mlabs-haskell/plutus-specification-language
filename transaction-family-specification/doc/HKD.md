@@ -69,7 +69,7 @@ data TransactionFamily =
   UpdateOracle Natural
   | Exchange Natural Natural
   | DrainCollectedFees
-data Token = Token Natural | ScriptAda
+data Token = Token Natural
 
 data OracleRedeemer (n :: Natural) = Update
 
@@ -78,7 +78,7 @@ instance ValidatorScript ('Oracle n) where
   type Datum ('Oracle n) = ()
   type Redeemer ('Oracle n) = OracleRedeemer n
 instance ValidatorScript 'CentralExchange where
-  type Currencies 'CentralExchange = '[ 'Ada ]
+  type Currencies 'CentralExchange = '[ 'AnythingElse ]
   type Datum 'CentralExchange = ()
   type Redeemer 'CentralExchange = ()
 ~~~
@@ -95,24 +95,24 @@ type instance Economy ExchangeDApp = Token
 
 type UpdateOracleInputs :: Natural -> InputsFor ExchangeDApp
 data UpdateOracleInputs n s w = UpdateOracleInputs {
-  oracle :: s ('Oracle n) ('Just 'Update) '() '[ 'Exactly 1 ('Token n) ]}
+  oracle :: s ('Oracle n) ('Just 'Update) '() '[ 'Exactly 1 ('Token n), 'MinimumRequiredAda ]}
 type UpdateOracleOutputs :: Natural -> OutputsFor ExchangeDApp
 data UpdateOracleOutputs n s w = UpdateOracleOutputs {
-  oracle :: s ('Oracle n) '() '[ 'Exactly 1 ('Token n) ]}
+  oracle :: s ('Oracle n) '() '[ 'Exactly 1 ('Token n), 'MinimumRequiredAda ]}
 instance Transaction ('UpdateOracle n) where
   type Inputs ('UpdateOracle n) = UpdateOracleInputs n
   type Outputs ('UpdateOracle n) = UpdateOracleOutputs n
 
 type ExchangeInputs :: Natural -> Natural -> InputsFor ExchangeDApp
 data ExchangeInputs m n s w = ExchangeInputs {
-  exchange :: s 'CentralExchange ('Just '()) '() '[],
+  exchange :: s 'CentralExchange ('Just '()) '() '[ 'AnythingElse ],
   oracle1 :: s ('Oracle m) 'Nothing '() '[ 'Exactly 1 ('Token m) ],
   oracle2 :: s ('Oracle n) 'Nothing '() '[ 'Exactly 1 ('Token n) ],
   wallet1 :: w "Wallet 1" '[ 'Some ('Token m) ],
   wallet2 :: w "Wallet 2" ' [ 'Some ('Token n) ]}
 type ExchangeOutputs :: Natural -> Natural -> OutputsFor ExchangeDApp
 data ExchangeOutputs m n s w = ExchangeOutputs {
-  exchange :: s 'CentralExchange '() ['Some ('Token m), 'Some ('Token n)],
+  exchange :: s 'CentralExchange '() ['Some ('Token m), 'Some ('Token n), 'AnythingElse],
   wallet1 :: w "Wallet 1" '[ 'Some ('Token n) ],
   wallet2 :: w "Wallet 2" '[ 'Some ('Token m) ]}
 instance Transaction ('Exchange m n) where
@@ -121,11 +121,11 @@ instance Transaction ('Exchange m n) where
 
 type DrainInputs :: InputsFor ExchangeDApp
 data DrainInputs s w = DrainInputs {
-  exchange :: s 'CentralExchange ('Just '()) '() ['Some ('Token 1), 'Some ('Token 2)]}
+  exchange :: s 'CentralExchange ('Just '()) '() '[ 'AnythingElse ]}
 type DrainOutputs :: OutputsFor ExchangeDApp
 data DrainOutputs s w = DrainOutputs {
-  authority :: w "Owner's wallet" ['Some ('Token 1), 'Some ('Token 2)],
-  exchange :: s 'CentralExchange '() '[]}
+  authority :: w "Owner's wallet" '[ 'AnythingElse ],
+  exchange :: s 'CentralExchange '() '[ 'MinimumRequiredAda ]}
 instance Transaction 'DrainCollectedFees where
   type Inputs 'DrainCollectedFees = DrainInputs
   type Outputs 'DrainCollectedFees = DrainOutputs

@@ -92,6 +92,8 @@ data Value currencies = Value (AmountsOf currencies)
 type AmountsOf :: [c] -> Type
 data AmountsOf currencies where
   Destitute :: AmountsOf '[]
+  MinimumAda :: AmountsOf '[ 'MinimumRequiredAda ]
+  Whatever :: AmountsOf '[ 'AnythingElse ]
   (:$) :: Natural -> Proxy c -> AmountsOf '[c]
   (:+) :: AmountsOf '[c] -> AmountsOf cs -> AmountsOf (c ': cs)
 ~~~
@@ -117,17 +119,17 @@ exampleExchangeTransaction = TxSpecimen {
   txFee = exampleFee,
   txSignatures = Map.empty}
 
-exampleExchangeInput :: TxInputSpecimen 'CentralExchange ('Just '()) '() '[]
+exampleExchangeInput :: TxInputSpecimen 'CentralExchange ('Just '()) '() '[ 'AnythingElse ]
 exampleExchangeInput = TxInputSpendingSpecimen
   TxOutSpecimen {
     txOutDatum = Const (),
-    txOutValue = Value Destitute}
+    txOutValue = Value Whatever}
   (Const ())
   
-exampleExchangeOutput :: TxOutSpecimen 'CentralExchange '() [ 'Some ('Token 1), 'Some ('Token 2) ]
+exampleExchangeOutput :: TxOutSpecimen 'CentralExchange '() [ 'Some ('Token 1), 'Some ('Token 2), 'AnythingElse ]
 exampleExchangeOutput = TxOutSpecimen {
   txOutDatum = Const (),
-  txOutValue = Value (1 :$ Proxy @('Some ('Token 1)) :+ 1 :$ Proxy @('Some ('Token 2)))}
+  txOutValue = Value (1 :$ Proxy @('Some ('Token 1)) :+ 1 :$ Proxy @('Some ('Token 2)) :+ Whatever)}
 
 exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Nothing '() '[ 'Exactly 1 ('Token 1) ]
 exampleOracle1Input = TxInputReferenceSpecimen
@@ -163,10 +165,10 @@ pubKey1, pubKey2 :: PubKey
 pubKey1 = "wallet1"
 pubKey2 = "wallet2"
 
-exampleCollateralWallet :: WalletSpecimen "Collateral" Collateral
+exampleCollateralWallet :: WalletSpecimen "Collateral" '[ 'MinimumRequiredAda ]
 exampleCollateralWallet = undefined
 
-exampleFee :: Value '[ 'Ada ]
+exampleFee :: Value '[ 'MinimumRequiredAda ]
 exampleFee = undefined
 ~~~
 

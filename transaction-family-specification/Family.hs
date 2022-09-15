@@ -43,6 +43,8 @@ data Quantity currency
   | AtLeast Natural currency
   | AtMost Natural currency
   | Some currency
+  | RequiredAda Natural
+  | MinimumRequiredAda
   | AnythingElse
 
 type InputFromScriptToTransaction t =
@@ -70,5 +72,3 @@ type InputsFor dapp = (forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> Va
 type MintsFor dapp = (forall (mp :: dapp) -> MintRedeemer mp -> [MintOf mp] -> Type) -> Type
 
 type OutputsFor dapp = (forall (s :: dapp) -> Datum s -> ValueKnownBy dapp -> Type) -> (Symbol -> ValueKnownBy dapp -> Type) -> Type
-
-data Ada = Ada
