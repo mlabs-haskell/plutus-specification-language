@@ -1,7 +1,13 @@
-{-# LANGUAGE DataKinds, ExplicitForAll, GADTs,
-             PolyKinds, RankNTypes, StandaloneKindSignatures,
-             TypeFamilies, TypeFamilyDependencies, TypeOperators,
-             UndecidableInstances #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExplicitForAll #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Family.Values where
 
@@ -9,10 +15,10 @@ import Data.Functor.Const (Const)
 import Data.Kind (Type)
 import Data.Map (Map)
 import Data.Proxy (Proxy)
-import Numeric.Natural (Natural)
+import Family (Ada (Ada), Datum, Economy, MintOf, MintRedeemer, Redeemer, Transaction (Inputs, Mints, Outputs))
+import Family.Ledger (POSIXTime, PubKey, Signature, SlotRange, always)
 import GHC.TypeLits (Symbol)
-import Family (Ada(Ada), Datum, Economy, Redeemer, MintOf, MintRedeemer, Transaction(Inputs, Mints, Outputs))
-import Family.Ledger (PubKey, Signature, SlotRange, POSIXTime, always)
+import Numeric.Natural (Natural)
 
 type DatumSpecimen :: forall script -> Datum script -> Type
 type family DatumSpecimen s :: Datum s -> Type
@@ -20,14 +26,15 @@ type family DatumSpecimen s :: Datum s -> Type
 type RedeemerSpecimen :: forall script -> Redeemer script -> Type
 type family RedeemerSpecimen s :: Redeemer s -> Type
 
-data TxSpecimen t = TxSpecimen {
-  txInputs :: Inputs t TxInputSpecimen WalletSpecimen,
-  txCollateral :: WalletSpecimen "Collateral" Collateral,
-  txOutputs :: Outputs t TxOutSpecimen WalletSpecimen,
-  txMint :: Mints t TxMintSpecimen,
-  txValidRange :: !SlotRange,
-  txFee :: Value '[ 'Ada ],
-  txSignatures :: Map PubKey Signature}
+data TxSpecimen t = TxSpecimen
+  { txInputs :: Inputs t TxInputSpecimen WalletSpecimen,
+    txCollateral :: WalletSpecimen "Collateral" Collateral,
+    txOutputs :: Outputs t TxOutSpecimen WalletSpecimen,
+    txMint :: Mints t TxMintSpecimen,
+    txValidRange :: !SlotRange,
+    txFee :: Value '[ 'Ada],
+    txSignatures :: Map PubKey Signature
+  }
 
 type TxInputSpecimen :: forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> [Economy dapp] -> Type
 data TxInputSpecimen s r d e where
@@ -35,16 +42,19 @@ data TxInputSpecimen s r d e where
   TxInputReferenceSpecimen :: TxOutSpecimen s d e -> TxInputSpecimen s 'Nothing d e
 
 type TxMintSpecimen :: forall (mp :: policy) -> MintRedeemer mp -> [MintOf mp] -> Type
-data TxMintSpecimen mp r e = TxMintSpecimen {
-  txMintValue :: Value e}
+data TxMintSpecimen mp r e = TxMintSpecimen
+  { txMintValue :: Value e
+  }
 
-data WalletSpecimen name e = WalletSpecimen {
-  walletPubKey :: PubKey}
+data WalletSpecimen name e = WalletSpecimen
+  { walletPubKey :: PubKey
+  }
 
 type TxOutSpecimen :: forall (s :: dapp) -> Datum s -> [Economy dapp] -> Type
-data TxOutSpecimen s d e = TxOutSpecimen {
-  txOutDatum :: DatumSpecimen s d,
-  txOutValue :: Value e}
+data TxOutSpecimen s d e = TxOutSpecimen
+  { txOutDatum :: DatumSpecimen s d,
+    txOutValue :: Value e
+  }
 
 type Value :: [currency] -> Type
 data Value currencies = Value (AmountsOf currencies)
@@ -56,6 +66,7 @@ data AmountsOf currencies where
   (:+) :: AmountsOf '[c] -> AmountsOf cs -> AmountsOf (c ': cs)
 
 infixr 3 :$
+
 infixr 2 :+
 
 data Collateral = CollateralAda

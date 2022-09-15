@@ -1,18 +1,28 @@
-{-# Language DataKinds, RankNTypes, StandaloneKindSignatures, TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Legend where
 
 import qualified Family
 
 data DApp = ValidatorScript | MintingPolicy
+
 data Family = Transaction
+
 data ValidatorRedeemer = ValidatorRedeemer
+
 data ValidatorDatum = ValidatorDatum
+
 data PolicyRedeemer = PolicyRedeemer
+
 data Token = MintedToken MPToken | OtherToken
+
 data MPToken = MPToken
 
 type instance Family.Economy DApp = Token
+
 type instance Family.DApp (t :: Family) = DApp
 
 instance Family.ValidatorScript 'ValidatorScript where
@@ -25,17 +35,23 @@ instance Family.MintingPolicyScript 'MintingPolicy where
   type MintRedeemer 'MintingPolicy = PolicyRedeemer
 
 type TransactionInputs :: Family.InputsFor DApp
-data TransactionInputs s w = TransactionInputs {
-  scriptReferenceInput :: s 'ValidatorScript 'Nothing 'ValidatorDatum '[ 'MintedToken 'MPToken, 'OtherToken ],
-  scriptConsumedInput :: s 'ValidatorScript ('Just 'ValidatorRedeemer) 'ValidatorDatum '[ 'MintedToken 'MPToken, 'OtherToken ],
-  walletInput :: w "Wallet" '[ 'MintedToken 'MPToken ]}
+data TransactionInputs s w = TransactionInputs
+  { scriptReferenceInput :: s 'ValidatorScript 'Nothing 'ValidatorDatum '[ 'MintedToken 'MPToken, 'OtherToken],
+    scriptConsumedInput :: s 'ValidatorScript ('Just 'ValidatorRedeemer) 'ValidatorDatum '[ 'MintedToken 'MPToken, 'OtherToken],
+    walletInput :: w "Wallet" '[ 'MintedToken 'MPToken]
+  }
+
 type TransactionMints :: Family.MintsFor DApp
-data TransactionMints mp = TransactionMints {
-  mintedTokens :: mp 'MintingPolicy 'PolicyRedeemer '[ 'Family.Mint 1 'MPToken ]}
+data TransactionMints mp = TransactionMints
+  { mintedTokens :: mp 'MintingPolicy 'PolicyRedeemer '[ 'Family.Mint 1 'MPToken]
+  }
+
 type TransactionOutputs :: Family.OutputsFor DApp
-data TransactionOutputs s w = TransactionOutputs {
-  scriptOutput :: s 'ValidatorScript 'ValidatorDatum '[ 'MintedToken 'MPToken, 'OtherToken ],
-  walletOutput :: w "Wallet" '[ 'OtherToken ]}
+data TransactionOutputs s w = TransactionOutputs
+  { scriptOutput :: s 'ValidatorScript 'ValidatorDatum '[ 'MintedToken 'MPToken, 'OtherToken],
+    walletOutput :: w "Wallet" '[ 'OtherToken]
+  }
+
 instance Family.Transaction 'Transaction where
   type Inputs 'Transaction = TransactionInputs
   type Mints 'Transaction = TransactionMints
