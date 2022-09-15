@@ -39,7 +39,7 @@ test-suite doc
   type:               exitcode-stdio-1.0
   main-is:            TransactionFamily.lhs
   hs-source-dirs:     doc
-  other-modules:      Typed, HKD, NFT, Diagram, Values
+  other-modules:      Typed, HKD, NFT, Diagram, Legend, Values
   ghc-options:        -pgmL markdown-unlit
   build-depends:      base, bytestring, containers, template-haskell, graphviz, transaction-family-specification
   build-tool-depends: markdown-unlit:markdown-unlit
