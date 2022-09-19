@@ -59,7 +59,8 @@ data TxMintSpecimen mp r e = TxMintSpecimen
   }
 
 data WalletSpecimen name e = WalletSpecimen
-  { walletPubKey :: PubKey
+  { walletPubKey :: PubKey,
+    walletValue :: Value e
   }
 
 type TxOutSpecimen :: forall (s :: dapp) -> Datum s -> ValueKnownBy dapp -> Type
@@ -69,7 +70,6 @@ data TxOutSpecimen s d e = TxOutSpecimen
   }
 
 newtype MintValue qs = MintValue (AmountsOf qs)
-
 
 type SatisfiesMintQuantity :: MintQuantity c -> Type
 data SatisfiesMintQuantity quantity deriving (Typeable)

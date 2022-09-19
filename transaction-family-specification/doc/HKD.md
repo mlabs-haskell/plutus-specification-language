@@ -22,7 +22,7 @@ The new HKD representation of the transaction family and DApp types in Haskell a
 reusable declarations into a library module:
 
 ~~~ {.haskell.ignore}
-module Families where
+module Family where
 
 class ValidatorScript s where
   type Currencies s :: [k]
@@ -39,12 +39,33 @@ type family DApp t
 type Economy :: dapp -> Type
 type family Economy t
 
+type MintOf mp = MintQuantity (MintedToken mp)
+
+data MintQuantity currency
+  = Mint Natural currency
+  | Burn Natural currency
+  | MintSome currency
+  | BurnSome currency
+  | MintOrBurnSome currency
+
+type ValueKnownBy dapp = [Quantity (Economy dapp)]
+
+data Quantity currency
+  = Exactly Natural currency
+  | AtLeast Natural currency
+  | AtMost Natural currency
+  | Some currency
+  | RequiredAdaPlus Natural
+  | MinimumRequiredAda
+  | AnythingElse
+  deriving (Show, Typeable)
+
 type InputFromScriptToTransaction t =
-  forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> [Economy (DApp t)] -> Type
+  forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy (DApp t) -> Type
 type OutputToScriptFromTransaction t =
-  forall (s :: DApp t) -> Datum s -> [Economy (DApp t)] -> Type
-type MintForTransaction t = forall (mp :: DApp t) -> MintRedeemer mp -> [MintedToken mp] -> Type
-type WalletUTxOFor dapp = Symbol -> [Economy dapp] -> Type
+  forall (s :: DApp t) -> Datum s -> ValueKnownBy (DApp t) -> Type
+type MintForTransaction t = forall (mp :: DApp t) -> MintRedeemer mp -> [MintOf mp] -> Type
+type WalletUTxOFor dapp = Symbol -> ValueKnownBy dapp -> Type
 
 class Transaction (t :: familie) where
   type Inputs t  :: InputFromScriptToTransaction t -> WalletUTxOFor (DApp t) -> Type
@@ -52,17 +73,16 @@ class Transaction (t :: familie) where
   type Outputs t :: OutputToScriptFromTransaction t -> WalletUTxOFor (DApp t) -> Type
   type Mints t = NoMints (DApp t)
 
-type NoMints :: forall k -> (forall (mp :: k) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
+type NoMints :: forall k -> (forall (mp :: k) -> MintRedeemer mp -> [MintOf mp] -> Type) -> Type
 data NoMints t mp = NoMints
 
 -- type/kind synonyms to simplify the kind signatures in specifications 
-type InputsFor dapp = (forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> [Economy dapp] -> Type) -> (Symbol -> [Economy dapp] -> Type) -> Type
-type MintsFor dapp = (forall (mp :: dapp) -> MintRedeemer mp -> [MintedToken mp] -> Type) -> Type
-type OutputsFor dapp = (forall (s :: dapp) -> Datum s -> [Economy dapp] -> Type) -> (Symbol -> [Economy dapp] -> Type) -> Type
+type InputsFor dapp = (forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy dapp -> Type) -> (Symbol -> ValueKnownBy dapp -> Type) -> Type
+type MintsFor dapp = (forall (mp :: dapp) -> MintRedeemer mp -> [MintOf mp] -> Type) -> Type
+type OutputsFor dapp = (forall (s :: dapp) -> Datum s -> ValueKnownBy dapp -> Type) -> (Symbol -> ValueKnownBy dapp -> Type) -> Type
 ~~~
 
 The core `data TransactionFamily` and `instance ValidatorScript` declarations remain unchanged.
-`Trade` redeemer any longer because
 
 <!--
 ~~~ {.haskell}

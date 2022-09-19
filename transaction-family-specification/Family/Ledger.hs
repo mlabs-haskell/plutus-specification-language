@@ -5,19 +5,19 @@ module Family.Ledger where
 import Data.ByteString (ByteString)
 import Data.String (IsString)
 
-newtype PubKey = PubKey {getPubKey :: LedgerBytes} deriving (Eq, IsString, Show)
+newtype PubKey = PubKey {getPubKey :: LedgerBytes} deriving (Eq, Ord, IsString, Show)
 
-newtype PubKeyHash = PubKeyHash {getPubKeyHash :: LedgerBytes} deriving (Eq, IsString, Show)
+newtype PubKeyHash = PubKeyHash {getPubKeyHash :: LedgerBytes} deriving (Eq, Ord, IsString, Show)
 
 newtype PaymentPubKeyHash = PaymentPubKeyHash {getPaymentPubKeyHash :: LedgerBytes} deriving (Eq, IsString, Show)
 
-newtype ValidatorHash = ValidatorHash {getValidatorHash :: LedgerBytes} deriving (Eq, IsString, Show)
+newtype ValidatorHash = ValidatorHash {getValidatorHash :: LedgerBytes} deriving (Eq, Ord, IsString, Show)
 
-newtype LedgerBytes = LedgerBytes {getLedgerBytes :: BuiltinByteString} deriving (Eq, IsString, Show)
+newtype LedgerBytes = LedgerBytes {getLedgerBytes :: BuiltinByteString} deriving (Eq, Ord, IsString, Show)
 
-newtype BuiltinByteString = BuiltinByteString ByteString deriving (Eq, IsString, Show)
+newtype BuiltinByteString = BuiltinByteString ByteString deriving (Eq, Ord, IsString, Show)
 
-data Signature
+newtype Signature = Signature {getSignature :: BuiltinByteString} deriving (Eq, IsString, Show)
 
 newtype POSIXTime = POSIXTime {getPOSIXTime :: Integer} deriving (Eq, Ord, Num)
 
