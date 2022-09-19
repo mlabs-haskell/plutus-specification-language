@@ -7,6 +7,7 @@ write-ghc-environment-files: never
 tests: true
 benchmarks: true
 
-package families
-
 allow-newer: graphviz:bytestring
+
+package refined
+  flags: -aeson -quickcheck

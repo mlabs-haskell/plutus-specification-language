@@ -10,8 +10,9 @@ module HKD where
 
 import Data.Functor.Const (Const (Const))
 import Data.Kind (Type)
+import Data.Typeable (Typeable)
 import GHC.TypeLits (Symbol)
-import Numeric.Natural (Natural)
+import GHC.TypeNats (Natural)
 
 import Family
 ~~~
@@ -69,7 +70,7 @@ data TransactionFamily =
   UpdateOracle Natural
   | Exchange Natural Natural
   | DrainCollectedFees
-data Token = Token Natural
+data Token = Token Natural deriving (Eq, Typeable)
 
 data OracleRedeemer (n :: Natural) = Update
 

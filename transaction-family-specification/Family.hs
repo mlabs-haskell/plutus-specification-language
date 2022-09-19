@@ -10,6 +10,7 @@
 module Family where
 
 import Data.Kind (Type)
+import Data.Typeable (Typeable)
 import GHC.TypeLits (Natural, Symbol)
 
 class ValidatorScript s where
@@ -43,9 +44,10 @@ data Quantity currency
   | AtLeast Natural currency
   | AtMost Natural currency
   | Some currency
-  | RequiredAda Natural
+  | RequiredAdaPlus Natural
   | MinimumRequiredAda
   | AnythingElse
+  deriving (Show, Typeable)
 
 type InputFromScriptToTransaction t =
   forall (s :: DApp t) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy (DApp t) -> Type

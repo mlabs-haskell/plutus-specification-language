@@ -5,7 +5,7 @@
 {-# LANGUAGE DataKinds, DuplicateRecordFields, GADTs, FlexibleInstances, OverloadedStrings,
              KindSignatures, StandaloneKindSignatures,
              MultiParamTypeClasses, NoStarIsType, NumericUnderscores,
-             PolyKinds, RankNTypes, TypeApplications, TypeFamilies, TypeOperators,
+             PolyKinds, RankNTypes, TemplateHaskell, TypeApplications, TypeFamilies, TypeOperators,
              UndecidableInstances #-}
 
 module Values where
@@ -16,6 +16,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Proxy (Proxy (Proxy))
 import Numeric.Natural (Natural)
+import Refined (refineTH)
 
 import Family
 import Family.Values
@@ -94,8 +95,8 @@ data AmountsOf currencies where
   Destitute :: AmountsOf '[]
   MinimumAda :: AmountsOf '[ 'MinimumRequiredAda ]
   Whatever :: AmountsOf '[ 'AnythingElse ]
-  (:$) :: Natural -> Proxy c -> AmountsOf '[c]
-  (:+) :: AmountsOf '[c] -> AmountsOf cs -> AmountsOf (c ': cs)
+  (:$) :: Natural -> Proxy c -> AmountsOf '[Quantity c]
+  (:+) :: AmountsOf '[q] -> AmountsOf qs -> AmountsOf (q ': qs)
 ~~~
 
 With all these types in place, we can generate concrete transactions as in the following example:
@@ -129,7 +130,8 @@ exampleExchangeInput = TxInputSpendingSpecimen
 exampleExchangeOutput :: TxOutSpecimen 'CentralExchange '() [ 'Some ('Token 1), 'Some ('Token 2), 'AnythingElse ]
 exampleExchangeOutput = TxOutSpecimen {
   txOutDatum = Const (),
-  txOutValue = Value (1 :$ Proxy @('Some ('Token 1)) :+ 1 :$ Proxy @('Some ('Token 2)) :+ Whatever)}
+  txOutValue = Value ($$(refineTH 1) :$ Proxy @('Token 1) :+ $$(refineTH 1) :$ Proxy @('Token 2) :+ Whatever)
+               :: Value ['Some ('Token 1), 'Some ('Token 2), 'AnythingElse]}
 
 exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Nothing '() '[ 'Exactly 1 ('Token 1) ]
 exampleOracle1Input = TxInputReferenceSpecimen
@@ -138,16 +140,17 @@ exampleOracle1Input = TxInputReferenceSpecimen
       priceInLovelace = 45,
       maxTradeVolume = 5_000,
       expiry = 20_000_000},
-    txOutValue = Value (1 :$ Proxy @('Exactly 1 ('Token 1)))}
+    txOutValue = Value ($$(refineTH 1) :$ Proxy @('Token 1) :+ Destitute :: AmountsOf '[ 'Exactly 1 ('Token 1) ])}
 
 exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Nothing '() '[ 'Exactly 1 ('Token 2) ]
-exampleOracle2Input = TxInputReferenceSpecimen
+exampleOracle2Input = TxInputReferenceSpecimen (
   TxOutSpecimen {
     txOutDatum = OracleDatum {
       priceInLovelace = 60,
       maxTradeVolume = 10_000,
       expiry = 20_000_000},
-    txOutValue = Value (1 :$ Proxy @('Exactly 1 ('Token 2)))}
+    txOutValue = Value ($$(refineTH 1) :$ Proxy @('Token 2) :+ Destitute) :: Value '[ 'Exactly 1 ('Token 2) ]})
+--  :: TxOutSpecimen ('Oracle 2) '() '[ 'Exactly 1 ('Token 2) ])
 
 exampleWallet1Input :: WalletSpecimen "Wallet 1" '[ 'Some ('Token 1) ]
 exampleWallet1Input = WalletSpecimen pubKey1

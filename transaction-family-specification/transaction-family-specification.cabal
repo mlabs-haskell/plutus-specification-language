@@ -24,7 +24,8 @@ extra-source-files: CHANGELOG.md
 library
   exposed-modules:    Family, Family.Values, Family.Ledger, Family.Diagram, Family.Diagram.TH
   default-language:   Haskell2010
-  build-depends:      base >= 4.15, bytestring, containers, text, template-haskell >= 2.17, fgl, graphviz >= 2999.10
+  build-depends:      base >= 4.15, bytestring, containers, text, template-haskell >= 2.17, refined,
+                      fgl, graphviz >= 2999.10
 
 executable diagram
   main-is:            Diagram.lhs
@@ -39,8 +40,9 @@ test-suite doc
   type:               exitcode-stdio-1.0
   main-is:            TransactionFamily.lhs
   hs-source-dirs:     doc
-  other-modules:      Typed, HKD, NFT, Diagram, Legend, Values
+  other-modules:      Typed, HKD, NFT, Legend, Values
   ghc-options:        -pgmL markdown-unlit
-  build-depends:      base, bytestring, containers, template-haskell, graphviz, transaction-family-specification
+  build-depends:      base, bytestring, containers, refined, template-haskell,
+                      graphviz, transaction-family-specification
   build-tool-depends: markdown-unlit:markdown-unlit
   default-language:   Haskell2010
