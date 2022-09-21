@@ -194,7 +194,30 @@ exampleCollateralWallet :: WalletSpecimen "Collateral" '[ 'MinimumRequiredAda ]
 exampleCollateralWallet = WalletSpecimen pubKey2 (Value MinimumAda)
 ~~~
 
-Once again, this example transaction is checked at compile time against [the specification](HKD.md). The example will
-fail to compile if we forget an input or an output, or if we specify a wrong datum or redeemer, or even a wrong amount
-of a specific token. This greatly improves the type-safety of the off-chain code. We can proceed to erase the types
-and turn the `exampleExchangeTransaction` into a proper Cardano transaction and submit it.
+<details> On type inference issues
+There is a number of type signatures of the `txOutValue` fields above that seem like they shouldn't be necessary. That
+seems to be [a GHC issue](https://github.com/nikita-volkov/refined/issues/79) with type inference of the context of
+typed expression splices.
+
+It would also be nice to get rid of the `Proxy` constructors, but the alternatives like the following don't read as
+well
+
+~~~ {.haskell.ignore}
+exampleWallet2Output = WalletSpecimen pubKey2 (Value $ Coins @('Token 1) $$(refineTH 59_400) :+ Destitute)
+~~~
+
+And of course, the type annotation would then be optional and one would be tempted to drop it, which would mean that
+the token type of each item would not be checked any more but inferred from the context. Swapping the declared order
+of tokens in
+
+~~~ {.haskell.ignore}
+type ExchangeOutputAmounts = [ 'Some ('Token 1), 'Some ('Token 2), 'AnythingElse ]
+~~~
+
+above would typecheck but the assigned token quantities qould be swapped.
+</details>
+
+This whole example transaction is checked at compile time against [the specification](HKD.md). The example will fail
+to compile if we forget an input or an output, or if we specify a wrong datum or redeemer, or even a wrong amount of a
+specific token. This greatly improves the type-safety of the off-chain code. We can proceed to erase the types and
+turn the `exampleExchangeTransaction` into a proper Cardano transaction and submit it.
