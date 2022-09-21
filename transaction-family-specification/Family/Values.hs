@@ -34,9 +34,8 @@ import Family
     ValueKnownBy,
   )
 import Family.Ledger (POSIXTime, PubKey, Signature, SlotRange, always)
-import GHC.TypeLits (Symbol)
-import GHC.TypeNats (KnownNat, natVal)
-import Numeric.Natural (Natural)
+import GHC.TypeLits (ErrorMessage (Text), Symbol, TypeError)
+import GHC.TypeNats (KnownNat, Natural, natVal)
 import Refined
 
 type DatumSpecimen :: forall script -> Datum script -> Type
@@ -188,10 +187,18 @@ instance
     | m > 0 = success
     | otherwise = throwRefineOtherException (typeRep q) "Disallowed amount in value, zero"
 
+type UnitOf :: Quantity c -> c
+type family UnitOf q where
+  UnitOf ('Exactly n coin) = coin
+  UnitOf ('AtLeast n coin) = coin
+  UnitOf ('AtMost n coin) = coin
+  UnitOf ('Some coin) = coin
+  UnitOf _ = TypeError (Text "(:$) works only with a concrete non-Ada coin")
+
 type AmountOf :: q -> Type
 data AmountOf quantity where
   Ada :: forall n. Refined (SatisfiesQuantity (RequiredAdaPlus n)) Natural -> AmountOf ('RequiredAdaPlus n)
-  (:$) :: forall e (c :: e) (q :: Quantity e). Refined (SatisfiesQuantity q) Natural -> Proxy c -> AmountOf q
+  (:$) :: forall e (q :: Quantity e). Refined (SatisfiesQuantity q) Natural -> Proxy (UnitOf q) -> AmountOf q
 
 type AmountsOf :: [q] -> Type
 data AmountsOf quantities where

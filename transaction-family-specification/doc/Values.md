@@ -99,7 +99,7 @@ data SatisfiesQuantity quantity deriving (Typeable)
 type AmountOf :: q -> Type
 data AmountOf quantity where
   Ada :: forall n. Refined (SatisfiesQuantity (RequiredAdaPlus n)) Natural -> AmountOf ('RequiredAdaPlus n)
-  (:$) :: forall e (c :: e) (q :: Quantity e). Refined (SatisfiesQuantity q) Natural -> Proxy c -> AmountOf q
+  (:$) :: forall e (q :: Quantity e). Refined (SatisfiesQuantity q) Natural -> Proxy (UnitOf q) -> AmountOf q
 
 type AmountsOf :: [q] -> Type
 data AmountsOf quantities where
@@ -109,10 +109,10 @@ data AmountsOf quantities where
   Whatever :: AmountsOf '[ 'AnythingElse ]
 ~~~
 
-There is also a number of [`Predicate`](https://hackage.haskell.org/package/refined-0.7/docs/Refined.html#g:4)
-instances for the `Quantity` and `MintQuantity` types. These allow compile-time (if statically known) and run-time
-checks (otherwise) of the concrete amounts in values against the boundaries the [transaction specification](HKD.md)
-requires there.
+There is also a number of [`Predicate`](https://hackage.haskell.org/package/refined-0.7/docs/Refined.html#g:4) and
+`UnitOf` instances for the `Quantity` and `MintQuantity` types. These allow compile-time (if statically known) and
+run-time checks (otherwise) of the concrete amounts in values against the boundaries the [transaction
+specification](HKD.md) requires there.
 
 With all these types finally in place, we can generate concrete transactions as in the following example of an
 `Exchange` transaction. The relative prices of assets specified by `Oracle 1` and `Oracle 2` are set in this example
