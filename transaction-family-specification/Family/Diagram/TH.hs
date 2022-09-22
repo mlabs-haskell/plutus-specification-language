@@ -212,29 +212,34 @@ reifyMint vars fieldName (TH.AppT TH.ListT itemType) = reifyList reifyMint vars 
 reifyMint vars _ t = error (Text.unpack (typeDescription vars t) <> ":\n" <> show t)
 
 quantitiesDescriptionQuote ::
-  HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q [MintQuantity Currency]
+  HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q [MintQuantity Text Currency]
 quantitiesDescriptionQuote vars = TH.unsafeCodeCoerce . fmap TH.ListE . mapM TH.unTypeCode . quantityDescriptions vars
 
-quantityDescriptions :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> [TH.Code TH.Q (MintQuantity Currency)]
+quantityDescriptions ::
+  HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> [TH.Code TH.Q (MintQuantity Text Currency)]
 quantityDescriptions vars (TH.AppT (TH.AppT TH.PromotedConsT t) ts) =
   quantityDescription vars t : quantityDescriptions vars ts
 quantityDescriptions vars TH.PromotedNilT = []
 quantityDescriptions vars (TH.SigT t _) = quantityDescriptions vars t
 
-quantityDescription :: HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q (MintQuantity Currency)
+quantityDescription ::
+  HasCallStack => [(TH.Name, Maybe TH.Type)] -> TH.Type -> TH.Code TH.Q (MintQuantity Text Currency)
 quantityDescription vars (TH.AppT (TH.PromotedT name) t)
   | name == 'MintOrBurnSome = currency [||MintOrBurnSome||]
   | name == 'MintSome = currency [||MintSome||]
   | name == 'BurnSome = currency [||BurnSome||]
   where
-    currency :: TH.Code TH.Q (Currency -> MintQuantity Currency) -> TH.Code TH.Q (MintQuantity Currency)
-    currency name = [||$$name (Currency $$(TH.unsafeCodeCoerce $ TH.litE $ TH.StringL $ Text.unpack $ typeDescription vars t))||]
-quantityDescription vars (TH.AppT (TH.AppT (TH.PromotedT name) (TH.LitT (TH.NumTyLit n))) t)
+    currency :: TH.Code TH.Q (Currency -> MintQuantity Text Currency) -> TH.Code TH.Q (MintQuantity Text Currency)
+    currency name = [||$$name (Currency $$(textLiteral $ typeDescription vars t))||]
+quantityDescription vars (TH.AppT (TH.AppT (TH.PromotedT name) qty) t)
   | name == 'Mint = currency [||Mint||]
   | name == 'Burn = currency [||Burn||]
   where
-    currency :: TH.Code TH.Q (Natural -> Currency -> MintQuantity Currency) -> TH.Code TH.Q (MintQuantity Currency)
-    currency name = [||$$name $$(TH.unsafeCodeCoerce $ TH.litE $ TH.IntegerL n) (Currency $$(TH.unsafeCodeCoerce $ TH.litE $ TH.StringL $ Text.unpack $ typeDescription vars t))||]
+    currency ::
+      TH.Code TH.Q (Text -> Currency -> MintQuantity Text Currency) -> TH.Code TH.Q (MintQuantity Text Currency)
+    currency name = [||$$name $$(textLiteral $ typeDescription vars qty) (Currency $$(textLiteral $ typeDescription vars t))||]
+quantityDescription vars (TH.SigT t _) = quantityDescription vars t
+quantityDescription _ t = error ("quantityDescription " <> show t)
 
 reifyList :: TypeReifier t -> TypeReifier t
 reifyList reifyItem vars fieldName itemType = foldMap enumerateItem [1 .. listItems]
@@ -262,17 +267,20 @@ typeDescription _ (TH.PromotedT name) = Text.pack (TH.nameBase name)
 typeDescription _ (TH.LitT (TH.NumTyLit n)) = Text.pack (show n)
 typeDescription _ (TH.LitT (TH.StrTyLit s)) = Text.pack s
 typeDescription _ t@TH.PromotedTupleT {} = Text.pack (dropWhile (== '\'') $ TH.pprint t)
-typeDescription vars (TH.AppT t (TH.VarT v)) =
+typeDescription vars (TH.AppT t v@(TH.VarT name)) =
   typeDescription vars t
-    <> case lookupIndex v vars of
+  <> case lookupIndex name vars of
       Nothing -> ""
-      Just (Nothing, i) -> " " <> Text.pack (show $ succ i)
-      Just (Just t@TH.LitT {}, _) -> " " <> Text.pack (TH.pprint t)
-      Just (Just t, _) -> error ("Can't describe variable type " <> TH.pprint t)
+      _ -> " " <> typeDescription vars v
 typeDescription vars (TH.AppT a b) = typeDescription vars a <> " " <> typeDescription vars b
 typeDescription vars (TH.SigT t _) = typeDescription vars t
 typeDescription _ (TH.ConT name) = Text.pack (TH.nameBase name)
 typeDescription _ TH.ListT = "List of"
+typeDescription vars (TH.VarT name) = case lookupIndex name vars of
+      Nothing -> ""
+      Just (Nothing, i) -> Text.pack (show $ succ i)
+      Just (Just t@TH.LitT {}, _) -> Text.pack (TH.pprint t)
+      _ -> error ("Can't describe variable type " <> TH.pprint name)
 typeDescription _ t = error (show t)
 
 lookupIndex :: Eq k => k -> [(k, v)] -> Maybe (v, Int)

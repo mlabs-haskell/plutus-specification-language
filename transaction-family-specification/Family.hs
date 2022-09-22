@@ -28,11 +28,11 @@ type family DApp t
 type Economy :: dapp -> Type
 type family Economy t
 
-type MintOf mp = MintQuantity (MintedToken mp)
+type MintOf mp = MintQuantity Natural (MintedToken mp)
 
-data MintQuantity currency
-  = Mint Natural currency
-  | Burn Natural currency
+data MintQuantity count currency
+  = Mint count currency
+  | Burn count currency
   | MintSome currency
   | BurnSome currency
   | MintOrBurnSome currency

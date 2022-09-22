@@ -69,7 +69,7 @@ data OutputToScript = OutputToScript
 data MintOrBurn = MintOrBurn
   { mintingPolicy :: Text,
     redeemer :: Text,
-    effects :: [MintQuantity Currency]
+    effects :: [MintQuantity Text Currency]
   }
 
 data Wallet = Wallet
@@ -180,14 +180,14 @@ nodeLabel (WalletUTxO _ currencies) = currenciesLabel currencies
 currenciesLabel :: [Currency] -> Text
 currenciesLabel = Text.intercalate ", " . map currencyName
 
-mintsLabel :: [MintQuantity Currency] -> Text
+mintsLabel :: [MintQuantity Text Currency] -> Text
 mintsLabel = Text.intercalate ", " . map describe
   where
-    describe (Burn n c) = Text.pack ("burn " <> shows n " ") <> currencyName c
-    describe (Mint n c) = Text.pack ("mint " <> shows n " ") <> currencyName c
-    describe (BurnSome c) = Text.pack ("burn ") <> currencyName c
-    describe (MintSome c) = Text.pack ("mint ") <> currencyName c
-    describe (MintOrBurnSome c) = Text.pack ("mint or burn ") <> currencyName c
+    describe (Burn n c) = "burn " <> n <> " " <> currencyName c
+    describe (Mint n c) = "mint " <> n <> " " <> currencyName c
+    describe (BurnSome c) = "burn " <> currencyName c
+    describe (MintSome c) = "mint " <> currencyName c
+    describe (MintOrBurnSome c) = "mint or burn " <> currencyName c
 
 transactionTypeFamilyGraph :: OverlayMode -> [TransactionTypeDiagram] -> Gr NodeId Text
 transactionTypeFamilyGraph mode = mergeGraphs . foldl' addTx (0, [])

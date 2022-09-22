@@ -77,13 +77,13 @@ data TxOutSpecimen s d e = TxOutSpecimen
 
 newtype MintValue qs = MintValue (AmountsOf qs)
 
-type SatisfiesMintQuantity :: MintQuantity c -> Type
+type SatisfiesMintQuantity :: MintQuantity n c -> Type
 data SatisfiesMintQuantity quantity deriving (Typeable)
 
 instance
   forall n c q.
   (KnownNat n, Typeable c, Typeable q) =>
-  Predicate (SatisfiesMintQuantity (Mint n (q :: c) :: MintQuantity c)) Integer
+  Predicate (SatisfiesMintQuantity (Mint n (q :: c) :: MintQuantity Natural c)) Integer
   where
   validate q m
     | m == fromIntegral n = success
@@ -94,7 +94,7 @@ instance
 instance
   forall n c q.
   (KnownNat n, Typeable c, Typeable q) =>
-  Predicate (SatisfiesMintQuantity (Burn n (q :: c) :: MintQuantity c)) Integer
+  Predicate (SatisfiesMintQuantity (Burn n (q :: c) :: MintQuantity Natural c)) Integer
   where
   validate q m
     | -m == fromIntegral n = success
@@ -105,7 +105,7 @@ instance
 instance
   forall c q.
   (Typeable c, Typeable q) =>
-  Predicate (SatisfiesMintQuantity (MintSome (q :: c) :: MintQuantity c)) Integer
+  Predicate (SatisfiesMintQuantity (MintSome (q :: c) :: MintQuantity Natural c)) Integer
   where
   validate q m
     | m > 0 = success
@@ -114,7 +114,7 @@ instance
 instance
   forall c q.
   (Typeable c, Typeable q) =>
-  Predicate (SatisfiesMintQuantity (BurnSome (q :: c) :: MintQuantity c)) Integer
+  Predicate (SatisfiesMintQuantity (BurnSome (q :: c) :: MintQuantity Natural c)) Integer
   where
   validate q m
     | m < 0 = success
@@ -123,7 +123,7 @@ instance
 instance
   forall c q.
   (Typeable c, Typeable q) =>
-  Predicate (SatisfiesMintQuantity (MintOrBurnSome (q :: c) :: MintQuantity c)) Integer
+  Predicate (SatisfiesMintQuantity (MintOrBurnSome (q :: c) :: MintQuantity Natural c)) Integer
   where
   validate q m
     | m /= 0 = success
