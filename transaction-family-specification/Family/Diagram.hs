@@ -26,7 +26,7 @@ import Data.GraphViz
     runGraphvizCanvas',
     toLabel,
   )
-import Data.GraphViz.Attributes (crow, dashed, diamond, style)
+import Data.GraphViz.Attributes (DirType (Back, NoDir), dashed, edgeEnds, normal, style)
 import Data.GraphViz.Attributes.Complete
   ( Attribute (ArrowHead, ArrowTail, Shape, Weight),
     Shape (DoubleOctagon, InvTrapezium),
@@ -137,10 +137,10 @@ transactionGraphToDot caption g = graphToDot params g'
                       if isTransaction src && nodeType dest == MintingPolicy
                         then
                           if "@ mint or burn" `Text.isInfixOf` l
-                            then [ArrowHead diamond]
+                            then [edgeEnds NoDir]
                             else
                               if "@ mint" `Text.isInfixOf` l
-                                then [ArrowHead crow]
+                                then [edgeEnds Back]
                                 else []
                         else []
         }
