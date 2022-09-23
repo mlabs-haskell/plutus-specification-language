@@ -129,7 +129,8 @@ reifyWallet vars fieldName (TH.AppT (TH.AppT (TH.VarT w) name) currencies)
     w == walletVar =
       pure
         [||
-        ($$fieldName, Wallet $$(textLiteral $ typeDescription vars name) $$(currencyDescriptionQuotes vars currencies))
+        ($$fieldName,
+         Wallet $$(textLiteral $ typeDescription vars name <> "'s wallet") $$(currencyDescriptionQuotes vars currencies))
         ||]
 reifyWallet vars fieldName (TH.AppT TH.ListT itemType) = reifyList reifyWallet vars fieldName itemType
 reifyWallet
@@ -279,6 +280,7 @@ typeDescription _ TH.ListT = "List of"
 typeDescription vars (TH.VarT name) = case lookupIndex name vars of
       Nothing -> ""
       Just (Nothing, i) -> Text.pack (show $ succ i)
+      Just (Just (TH.LitT (TH.StrTyLit s)), _) -> Text.pack s
       Just (Just t@TH.LitT {}, _) -> Text.pack (TH.pprint t)
       _ -> error ("Can't describe variable type " <> TH.pprint name)
 typeDescription _ t = error (show t)
