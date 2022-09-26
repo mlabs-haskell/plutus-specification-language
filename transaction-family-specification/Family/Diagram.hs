@@ -4,7 +4,36 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Family.Diagram where
+module Family.Diagram (
+  TransactionGraph,
+  OverlayMode (Distinct, Parallel, Serial),
+  TransactionTypeDiagram (TransactionTypeDiagram,
+                          transactionName,
+                          scriptInputs,
+                          scriptOutputs,
+                          walletInputs,
+                          walletOutputs,
+                          mints),
+  InputFromScript (InputFromScript,
+                   fromScript,
+                   redeemer,
+                   datum,
+                   currencies),
+  OutputToScript (OutputToScript,
+                  toScript,
+                  datum,
+                  currencies),
+  MintOrBurn (MintOrBurn,
+              mintingPolicy,
+              redeemer,
+              effects),
+  Wallet (Wallet,
+          walletName,
+          currencies),
+  Currency (Currency),
+  transactionGraphToDot,
+  transactionTypeGraph,
+  transactionTypeFamilyGraph) where
 
 import Control.Arrow ((&&&))
 import Data.Bifunctor (first, second)
@@ -169,6 +198,9 @@ data NodeId
   | WalletUTxO Text [Currency]
   deriving (Eq, Ord, Show)
 
+type TransactionGraph = Gr NodeId Text
+--newtype TransactionGraph = TransactionGraph {getTransactionGrah :: Gr NodeId Text}
+
 nodeLabel :: NodeId -> Text
 nodeLabel (MintingPolicyNamed name) = name
 nodeLabel (ValidatorScriptNamed name) = name
@@ -189,20 +221,20 @@ mintsLabel = Text.intercalate ", " . map describe
     describe (MintSome c) = "mint " <> currencyName c
     describe (MintOrBurnSome c) = "mint or burn " <> currencyName c
 
-transactionTypeFamilyGraph :: OverlayMode -> [TransactionTypeDiagram] -> Gr NodeId Text
+transactionTypeFamilyGraph :: OverlayMode -> [TransactionTypeDiagram] -> TransactionGraph
 transactionTypeFamilyGraph mode = mergeGraphs . foldl' addTx (0, [])
   where
-    mergeGraphs :: (Int, [Gr NodeId Text]) -> Gr NodeId Text
+    mergeGraphs :: (Int, [TransactionGraph]) -> TransactionGraph
     mergeGraphs (total, gs) = replaceFixedNodes mode total g
       where
         g = gconcat gs
-    addTx :: (Int, [Gr NodeId Text]) -> TransactionTypeDiagram -> (Int, [Gr NodeId Text])
+    addTx :: (Int, [TransactionGraph]) -> TransactionTypeDiagram -> (Int, [TransactionGraph])
     addTx (!total, gs) d = (total + maxNodeCount d, transactionTypeGraph total d : gs)
     maxNodeCount :: TransactionTypeDiagram -> Int
     maxNodeCount TransactionTypeDiagram {scriptInputs, scriptOutputs, walletInputs, walletOutputs} =
       1 `max` (length scriptInputs + length scriptOutputs) `max` (length walletInputs + length walletOutputs)
 
-replaceFixedNodes :: OverlayMode -> Int -> Gr NodeId Text -> Gr NodeId Text
+replaceFixedNodes :: OverlayMode -> Int -> TransactionGraph -> TransactionGraph
 replaceFixedNodes mode total g =
   mkGraph (sortOn (Down . fst) $ first switchNode <$> labNodes g) (switchEnds <$> labEdges g)
   where
@@ -216,7 +248,7 @@ replaceFixedNodes mode total g =
     nodeMapOfType :: NodeType -> Map NodeId Int
     nodeMapOfType n =
       Map.fromList (zip (nodesOfType n g) $ (nodeTypeRange * total +) <$> [fromEnum n, fromEnum n + nodeTypeRange ..])
-    nodesOfType :: NodeType -> Gr NodeId Text -> [NodeId]
+    nodesOfType :: NodeType -> TransactionGraph -> [NodeId]
     nodesOfType t g = snd <$> filter ((t ==) . nodeType . fst) (labNodes g)
     nodeMap :: IntMap Int
     nodeMap = case mode of
@@ -250,7 +282,7 @@ replaceFixedNodes mode total g =
 gconcat :: [Gr a b] -> Gr a b
 gconcat = uncurry mkGraph . mconcat . map (labNodes &&& labEdges)
 
-transactionTypeGraph :: Int -> TransactionTypeDiagram -> Gr NodeId Text
+transactionTypeGraph :: Int -> TransactionTypeDiagram -> TransactionGraph
 transactionTypeGraph
   startIndex
   TransactionTypeDiagram {transactionName, scriptInputs, scriptOutputs, walletInputs, walletOutputs, mints} =
