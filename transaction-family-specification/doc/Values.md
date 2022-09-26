@@ -170,16 +170,16 @@ exampleOracle2Input = TxInputReferenceSpecimen (
       expiry = 20_000_000},
     txOutValue = Value ($$(refineTH 1) :$ Proxy @('Token 2) :+ Destitute) :: Value '[ 'Exactly 1 ('Token 2) ]})
 
-exampleWallet1Input :: WalletSpecimen "Wallet 1" '[ 'Some ('Token 1) ]
+exampleWallet1Input :: WalletSpecimen "Alice" '[ 'Some ('Token 1) ]
 exampleWallet1Input = WalletSpecimen pubKey1 $ Value ($$(refineTH 60_000) :$ Proxy @('Token 1) :+ Destitute)
 
-exampleWallet2Input :: WalletSpecimen "Wallet 2" '[ 'Some ('Token 2) ]
+exampleWallet2Input :: WalletSpecimen "Bob" '[ 'Some ('Token 2) ]
 exampleWallet2Input = WalletSpecimen pubKey2 (Value $ $$(refineTH 45_000) :$ Proxy @('Token 2) :+ Destitute)
 
-exampleWallet1Output :: WalletSpecimen "Wallet 1" '[ 'Some ('Token 2) ]
+exampleWallet1Output :: WalletSpecimen "Alice" '[ 'Some ('Token 2) ]
 exampleWallet1Output = WalletSpecimen pubKey1 (Value $ $$(refineTH 44_550) :$ Proxy @('Token 2) :+ Destitute)
 
-exampleWallet2Output :: WalletSpecimen "Wallet 2" '[ 'Some ('Token 1) ]
+exampleWallet2Output :: WalletSpecimen "Bob" '[ 'Some ('Token 1) ]
 exampleWallet2Output = WalletSpecimen pubKey2 (Value $ $$(refineTH 59_400) :$ Proxy @('Token 1) :+ Destitute)
 
 pubKey1, pubKey2 :: PubKey
