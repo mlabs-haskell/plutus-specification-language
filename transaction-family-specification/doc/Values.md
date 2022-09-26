@@ -152,23 +152,25 @@ exampleExchangeOutput = TxOutSpecimen {
   txOutValue = Value ($$(refineTH 600) :$ Proxy @('Token 1) :+ $$(refineTH 450) :$ Proxy @('Token 2) :+ Whatever)
                :: Value ExchangeOutputAmounts}
 
-exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Nothing '() '[ 'Exactly 1 ('Token 1) ]
+exampleOracle1Input :: TxInputSpecimen ('Oracle 1) 'Nothing '() '[ 'Exactly 1 ('Token 1), 'MinimumRequiredAda ]
 exampleOracle1Input = TxInputReferenceSpecimen
   TxOutSpecimen {
     txOutDatum = OracleDatum {
       priceInLovelace = 45,
       maxTradeVolume = 500_000,
       expiry = 20_000_000},
-    txOutValue = Value ($$(refineTH 1) :$ Proxy @('Token 1) :+ Destitute :: AmountsOf '[ 'Exactly 1 ('Token 1) ])}
+    txOutValue = Value ($$(refineTH 1) :$ Proxy @('Token 1) :+ MinimumAda
+                        :: AmountsOf '[ 'Exactly 1 ('Token 1), 'MinimumRequiredAda ])}
 
-exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Nothing '() '[ 'Exactly 1 ('Token 2) ]
+exampleOracle2Input :: TxInputSpecimen ('Oracle 2) 'Nothing '() '[ 'Exactly 1 ('Token 2), 'MinimumRequiredAda ]
 exampleOracle2Input = TxInputReferenceSpecimen (
   TxOutSpecimen {
     txOutDatum = OracleDatum {
       priceInLovelace = 60,
       maxTradeVolume = 100_000,
       expiry = 20_000_000},
-    txOutValue = Value ($$(refineTH 1) :$ Proxy @('Token 2) :+ Destitute) :: Value '[ 'Exactly 1 ('Token 2) ]})
+    txOutValue = Value ($$(refineTH 1) :$ Proxy @('Token 2) :+ MinimumAda)
+                 :: Value '[ 'Exactly 1 ('Token 2), 'MinimumRequiredAda ]})
 
 exampleWallet1Input :: WalletSpecimen "Alice" '[ 'Some ('Token 1) ]
 exampleWallet1Input = WalletSpecimen pubKey1 $ Value ($$(refineTH 60_000) :$ Proxy @('Token 1) :+ Destitute)

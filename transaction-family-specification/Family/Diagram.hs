@@ -31,14 +31,14 @@ module Family.Diagram (
           walletName,
           currencies),
   Currency (Currency),
-  transactionGraphToDot,
   transactionTypeGraph,
-  transactionTypeFamilyGraph) where
+  combineTransactionGraphs,
+  transactionGraphToDot) where
 
 import Control.Arrow ((&&&))
 import Data.Bifunctor (first, second)
 import Data.Foldable (toList)
-import Data.Graph.Inductive (Context, Gr, empty, gmap, lab, labEdges, labNodes, match, mkGraph)
+import Data.Graph.Inductive (Context, Gr, empty, gmap, lab, labEdges, labNodes, match, mkGraph, nodeRange)
 import Data.GraphViz
   ( DotGraph,
     GlobalAttributes (GraphAttrs),
@@ -131,8 +131,8 @@ isTransaction = (== Transaction) . nodeType
 isScriptUTxO :: Int -> Bool
 isScriptUTxO = (`elem` [TransactionInputFromScript, TransactionOutputToScript]) . nodeType
 
-transactionGraphToDot :: Text -> Gr NodeId Text -> DotGraph Int
-transactionGraphToDot caption g = graphToDot params g'
+transactionGraphToDot :: Text -> TransactionGraph -> DotGraph Int
+transactionGraphToDot caption (TransactionGraph g) = graphToDot params g'
   where
     g' :: Gr Text Text
     g' =
@@ -198,8 +198,7 @@ data NodeId
   | WalletUTxO Text [Currency]
   deriving (Eq, Ord, Show)
 
-type TransactionGraph = Gr NodeId Text
---newtype TransactionGraph = TransactionGraph {getTransactionGrah :: Gr NodeId Text}
+newtype TransactionGraph = TransactionGraph {getTransactionGrah :: Gr NodeId Text}
 
 nodeLabel :: NodeId -> Text
 nodeLabel (MintingPolicyNamed name) = name
@@ -221,24 +220,16 @@ mintsLabel = Text.intercalate ", " . map describe
     describe (MintSome c) = "mint " <> currencyName c
     describe (MintOrBurnSome c) = "mint or burn " <> currencyName c
 
-transactionTypeFamilyGraph :: OverlayMode -> [TransactionTypeDiagram] -> TransactionGraph
-transactionTypeFamilyGraph mode = mergeGraphs . foldl' addTx (0, [])
-  where
-    mergeGraphs :: (Int, [TransactionGraph]) -> TransactionGraph
-    mergeGraphs (total, gs) = replaceFixedNodes mode total g
-      where
-        g = gconcat gs
-    addTx :: (Int, [TransactionGraph]) -> TransactionTypeDiagram -> (Int, [TransactionGraph])
-    addTx (!total, gs) d = (total + maxNodeCount d, transactionTypeGraph total d : gs)
-    maxNodeCount :: TransactionTypeDiagram -> Int
-    maxNodeCount TransactionTypeDiagram {scriptInputs, scriptOutputs, walletInputs, walletOutputs} =
-      1 `max` (length scriptInputs + length scriptOutputs) `max` (length walletInputs + length walletOutputs)
+combineTransactionGraphs :: OverlayMode -> [TransactionGraph] -> TransactionGraph
+combineTransactionGraphs mode gs = replaceFixedNodes mode totalNodeCount (TransactionGraph graphUnion)
+  where graphUnion = gconcat $ getTransactionGrah <$> gs
+        totalNodeCount = snd (nodeRange graphUnion) `div` 8 + 1
 
 replaceFixedNodes :: OverlayMode -> Int -> TransactionGraph -> TransactionGraph
-replaceFixedNodes mode total g =
-  mkGraph (sortOn (Down . fst) $ first switchNode <$> labNodes g) (switchEnds <$> labEdges g)
+replaceFixedNodes mode total (TransactionGraph g) =
+  TransactionGraph $ mkGraph (sortOn (Down . fst) $ first switchNode <$> labNodes g) (switchEnds <$> labEdges g)
   where
-    g' = replaceFixedNodes Distinct total g
+    TransactionGraph g' = replaceFixedNodes Distinct total (TransactionGraph g)
     switchEnds (start, end, label) = (switchNode start, switchNode end, label)
     switchNode n = IntMap.findWithDefault n n nodeMap
     nodeIdMap :: Map NodeId Int
@@ -248,7 +239,7 @@ replaceFixedNodes mode total g =
     nodeMapOfType :: NodeType -> Map NodeId Int
     nodeMapOfType n =
       Map.fromList (zip (nodesOfType n g) $ (nodeTypeRange * total +) <$> [fromEnum n, fromEnum n + nodeTypeRange ..])
-    nodesOfType :: NodeType -> TransactionGraph -> [NodeId]
+    nodesOfType :: NodeType -> Gr NodeId Text -> [NodeId]
     nodesOfType t g = snd <$> filter ((t ==) . nodeType . fst) (labNodes g)
     nodeMap :: IntMap Int
     nodeMap = case mode of
@@ -280,13 +271,19 @@ replaceFixedNodes mode total g =
       | otherwise = False
 
 gconcat :: [Gr a b] -> Gr a b
-gconcat = uncurry mkGraph . mconcat . map (labNodes &&& labEdges)
+gconcat gs = mkGraph allNodes allEdges where
+  (_, allNodes, allEdges) = foldl' addGraph (0, [], []) gs
+  addGraph :: (Int, [(Int, a)], [(Int, Int, b)]) -> Gr a b -> (Int, [(Int, a)], [(Int, Int, b)])
+  addGraph (maxNodeId, nodes, edges) g =
+    (maxNodeId + 8 * (snd (nodeRange g) `div` 8 + 1),
+     map (first (maxNodeId +)) (labNodes g) ++ nodes,
+     map (firstTwo (maxNodeId +)) (labEdges g) ++ edges)
+  firstTwo f (a, b, c) = (f a, f b, c)
 
-transactionTypeGraph :: Int -> TransactionTypeDiagram -> TransactionGraph
+transactionTypeGraph :: TransactionTypeDiagram -> TransactionGraph
 transactionTypeGraph
-  startIndex
   TransactionTypeDiagram {transactionName, scriptInputs, scriptOutputs, walletInputs, walletOutputs, mints} =
-    mkGraph nodes (nub edges)
+    TransactionGraph (mkGraph nodes $ nub edges)
     where
       nodes =
         (transactionNode, TransactionNamed transactionName)
@@ -319,36 +316,36 @@ transactionTypeGraph
                 let [(walletNode, _)] = filter ((WalletNamed name ==) . snd) walletNodes
             ]
           ]
-      transactionNode = nodeTypeRange * startIndex
+      transactionNode = 0
       isNodes =
         [ (nodeTypeRange * n + 1, ScriptUTxO fromScript datum currencies)
-          | (n, (name, InputFromScript {fromScript, datum, currencies})) <- zip [startIndex ..] $ Map.toList scriptInputs
+          | (n, (name, InputFromScript {fromScript, datum, currencies})) <- zip [0 ..] $ Map.toList scriptInputs
         ]
       osNodes =
         [ (nodeTypeRange * n + 2, ScriptUTxO toScript datum currencies)
-          | (n, (name, OutputToScript {toScript, datum, currencies})) <- zip [startIndex ..] $ Map.toList scriptOutputs
+          | (n, (name, OutputToScript {toScript, datum, currencies})) <- zip [0 ..] $ Map.toList scriptOutputs
         ]
       iwNodes =
         [ (nodeTypeRange * n + 3, WalletUTxO walletName currencies)
-          | (n, (name, Wallet {walletName, currencies})) <- zip [startIndex ..] $ Map.toList walletInputs
+          | (n, (name, Wallet {walletName, currencies})) <- zip [0 ..] $ Map.toList walletInputs
         ]
       owNodes =
         [ (nodeTypeRange * n + 4, WalletUTxO walletName currencies)
-          | (n, (name, Wallet {walletName, currencies})) <- zip [startIndex ..] $ Map.toList walletOutputs
+          | (n, (name, Wallet {walletName, currencies})) <- zip [0 ..] $ Map.toList walletOutputs
         ]
       mpNodes =
         [ (nodeTypeRange * n + 5, MintingPolicyNamed name)
-          | (n, name) <- zip [startIndex ..] $ nub $ mintingPolicy . snd <$> Map.toList mints
+          | (n, name) <- zip [0 ..] $ nub $ mintingPolicy . snd <$> Map.toList mints
         ]
       scriptNodes =
         [ (nodeTypeRange * n + 6, ValidatorScriptNamed name)
           | (n, name) <-
-              zip [startIndex ..] $
+              zip [0 ..] $
                 nub $
                   map snd $
                     Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs))
         ]
       walletNodes =
         [ (nodeTypeRange * n + 7, WalletNamed name)
-          | (n, name) <- zip [startIndex ..] $ nub $ map snd $ Map.toList (walletName <$> walletInputs <> walletOutputs)
+          | (n, name) <- zip [0 ..] $ nub $ map snd $ Map.toList (walletName <$> walletInputs <> walletOutputs)
         ]

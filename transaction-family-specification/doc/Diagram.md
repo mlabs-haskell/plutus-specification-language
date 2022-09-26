@@ -9,9 +9,9 @@ module Diagram where
 
 import Control.Concurrent (forkIO)
 import Family.Diagram (
-  TransactionTypeDiagram,
+  TransactionTypeDiagram, TransactionGraph,
   OverlayMode (Distinct, Parallel, Serial),
-  transactionGraphToDot, transactionTypeGraph, transactionTypeFamilyGraph)
+  transactionGraphToDot, transactionTypeGraph, combineTransactionGraphs)
 import Data.GraphViz (
   GraphvizCanvas (Xlib), GraphvizOutput (Canon, DotOutput, Svg),
   runGraphviz, runGraphvizCanvas')
@@ -30,11 +30,11 @@ minting policies as trapesoids, and UTxOs as ovals. It's easier to explain as a 
 First we generate some diagrams using the Template Haskell splices from `Family.Diagram.TH`:
 
 ~~~ {.haskell}
-update, exchange, drain :: TransactionTypeDiagram
-update = $( [t| 'HKD.UpdateOracle 1 |] >>= untypedDiagramForTransactionType)
-exchange = $( [t| 'HKD.Exchange 1 2 |] >>= untypedDiagramForTransactionType)
-drain = $$(diagramForTransactionType $ TH.PromotedT $ TH.mkName "HKD.DrainCollectedFees")
-legend = $$(diagramForTransactionType $ TH.PromotedT $ TH.mkName "Legend.Transaction")
+update, exchange, drain :: TransactionGraph
+update = transactionTypeGraph $( [t| 'HKD.UpdateOracle 1 |] >>= untypedDiagramForTransactionType)
+exchange = transactionTypeGraph $( [t| 'HKD.Exchange 1 2 |] >>= untypedDiagramForTransactionType)
+drain = transactionTypeGraph $$(diagramForTransactionType $ TH.PromotedT $ TH.mkName "HKD.DrainCollectedFees")
+legend = transactionTypeGraph $$(diagramForTransactionType $ TH.PromotedT $ TH.mkName "Legend.Transaction")
 ~~~
 
 The function `diagramForTransactionType` and `untypedDiagramForTransactionType` generate a Template Haskell quote for
@@ -44,15 +44,15 @@ different modes of combinations at the moment: `Distinct`, `Parallel`, and `Seri
 
 ~~~ {.haskell}
 main = do
-  let g1 = transactionGraphToDot "exchange" (transactionTypeGraph 0 exchange)
-      g2 = transactionGraphToDot "distinct" (transactionTypeFamilyGraph Distinct [update, exchange, drain])
-      g3 = transactionGraphToDot "parallel" (transactionTypeFamilyGraph Parallel [update, exchange, drain])
-      g4 = transactionGraphToDot "serial" (transactionTypeFamilyGraph Serial [update, exchange, drain])
+  let g1 = transactionGraphToDot "exchange" exchange
+      g2 = transactionGraphToDot "distinct" (combineTransactionGraphs Distinct [update, exchange, drain])
+      g3 = transactionGraphToDot "parallel" (combineTransactionGraphs Parallel [update, exchange, drain])
+      g4 = transactionGraphToDot "serial" (combineTransactionGraphs Serial [update, exchange, drain])
   forkIO (runGraphvizCanvas' g2 Xlib)
   forkIO (runGraphvizCanvas' g3 Xlib)
   forkIO (runGraphvizCanvas' g4 Xlib)
   runGraphviz g4 Canon "update-exchange-drain.dot"
-  runGraphviz (transactionGraphToDot "Legend" (transactionTypeGraph 0 legend)) Svg "legend.svg"
+  runGraphviz (transactionGraphToDot "Legend" legend) Svg "legend.svg"
 ~~~
 
 The serial mode appears to be the most intuitive of the three. That particular output of this sequence can be seen

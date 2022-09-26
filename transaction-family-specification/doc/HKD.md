@@ -129,8 +129,8 @@ instance Transaction ('UpdateOracle n) where
 type ExchangeInputs :: Natural -> Natural -> InputsFor ExchangeDApp
 data ExchangeInputs m n s w = ExchangeInputs {
   exchange :: s 'CentralExchange ('Just '()) '() '[ 'AnythingElse ],
-  oracle1 :: s ('Oracle m) 'Nothing '() '[ 'Exactly 1 ('Token m) ],
-  oracle2 :: s ('Oracle n) 'Nothing '() '[ 'Exactly 1 ('Token n) ],
+  oracle1 :: s ('Oracle m) 'Nothing '() '[ 'Exactly 1 ('Token m), 'MinimumRequiredAda ],
+  oracle2 :: s ('Oracle n) 'Nothing '() '[ 'Exactly 1 ('Token n), 'MinimumRequiredAda ],
   wallet1 :: w "Alice" '[ 'Some ('Token m) ],
   wallet2 :: w "Bob" ' [ 'Some ('Token n) ]}
 type ExchangeOutputs :: Natural -> Natural -> OutputsFor ExchangeDApp
