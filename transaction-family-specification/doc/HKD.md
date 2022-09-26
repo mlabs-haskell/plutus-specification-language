@@ -105,8 +105,10 @@ instance ValidatorScript 'CentralExchange where
 ~~~
 -->
 
-The new HKD representation of the transaction family and DApp types in Haskell is wordier than it used to be, because
-we need to declare two new ADTs for inputs and outputs of every script:
+## Running example
+
+The new HKD type representation is wordier than it [used to be](Typed.md), because we need to declare two new ADTs for
+inputs and outputs of every script, and each of them requires a kind signature:
 
 ~~~ {.haskell}
 data ExchangeDApp = Oracle Natural | CentralExchange
@@ -152,13 +154,26 @@ instance Transaction 'DrainCollectedFees where
   type Outputs 'DrainCollectedFees = DrainOutputs
 ~~~
 
+Replacing type families and their instances by data families would be slightly less verbose, but they'd bring other
+problems in turn.
+
+If that's not clear, the code snippet above exists solely at the type level of Haskell. One reason for that is because
+Haskell is not a dependently-typed language at the value level, but at the type level it is. Every field of the
+`Inputs`/`Outputs` records above has a kind of `InputFromScriptToTransaction`.`OutputToScriptFromTransaction`, which
+rely on [visible dependent
+quantification](https://ryanglscott.github.io/2019/03/15/visible-dependent-quantification-in-haskell), a GHC extension
+available only in kinds.
+
 ## Graphing the transaction diagram
 
-[Diagram](Diagram.md)
+Once the transaction types are declared, we can automatically [generate diagrams](Diagram.md) for them.
 
 ## Building concrete transaction values
 
-[Getting concrete](Values.md)
+The other reason for declaring the transactions at the [type
+level](https://aphyr.com/posts/342-typing-the-technical-interview) is because types _can_ be used to constrain
+values. So after we declare the transaction types, we can build [transaction values](Values.md) conforming to these
+types.
 
 ## Closing the family
 
