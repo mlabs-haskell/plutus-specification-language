@@ -209,7 +209,7 @@ nodeLabel ScriptUTxO {datum, currencies} = currenciesLabel currencies <> "\n<" <
 nodeLabel (WalletUTxO _ currencies) = currenciesLabel currencies
 
 currenciesLabel :: [Currency] -> Text
-currenciesLabel = Text.intercalate ", " . map currencyName
+currenciesLabel = Text.unlines . map currencyName
 
 mintsLabel :: [MintQuantity Text Currency] -> Text
 mintsLabel = Text.intercalate ", " . map describe
