@@ -5,6 +5,7 @@ author:        MLabs
 
 executable diagrams
   main-is:          Diagrams.hs
+  ghc-options:      -ddump-splices -ddump-to-file
   default-language: Haskell2010
   other-modules:
     Spec

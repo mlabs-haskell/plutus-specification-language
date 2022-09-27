@@ -18,6 +18,7 @@ import Data.Map qualified as Map
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Tuple (swap)
 import Family (MintQuantity (Burn, BurnSome, Mint, MintOrBurnSome, MintSome), Transaction (Inputs, Mints, Outputs))
 import Family.Diagram
   ( Currency (..),
@@ -66,13 +67,13 @@ diagramForTransactionType t = TH.Code $ do
 reifyMapField :: forall a. TH.Type -> TH.Name -> TypeReifier a -> TH.Code TH.Q [(Text, a)]
 reifyMapField t assocTypeName reifyType = TH.Code $ do
   let description = TH.pprint assocTypeName <> " '" <> TH.pprint t
-      (_, typeArgs) = typeNameAndArgs t
-  typeName <-
+      (_, txArgs) = typeNameAndArgs t
+  ((_, lhsArgs), (typeName, rhsArgs)) <-
     TH.reifyInstances assocTypeName [t] >>= \case
-      [TH.TySynInstD (TH.TySynEqn _ _ t')] -> pure (fst $ typeNameAndArgs t')
-      [d] -> ''Transaction <$ TH.reportError ("Weird instance " <> description <> ": " <> show d)
-      [] -> ''Transaction <$ TH.reportError ("Missing instance " <> description)
-      _ -> ''Transaction <$ TH.reportError ("Multiple instances " <> description)
+      [TH.TySynInstD (TH.TySynEqn _ (TH.AppT _ lhs) rhs)] -> pure (typeNameAndArgs lhs, typeNameAndArgs rhs)
+      [d] -> error ("Weird instance " <> description <> ": " <> show d)
+      [] -> error ("Missing instance " <> description)
+      _ -> error ("Multiple instances " <> description)
   (TH.TyConI tyCon) <- TH.reify typeName
   (tyConName, tyVars, cons) <- case tyCon of
     TH.DataD _ nm tyVars _kind cons _ -> pure (nm, tyVars, cons)
@@ -88,8 +89,11 @@ reifyMapField t assocTypeName reifyType = TH.Code $ do
         TH.examineCode <$> reifyType varBindings [||Text.pack $$(stringLiteral $ TH.nameBase name)||] fieldType
       addName :: TH.Name -> TH.TExp a -> TH.Code TH.Q (Text, a)
       addName name a = [||(Text.pack $$(stringLiteral $ TH.nameBase name), $$(TH.Code $ pure a))||]
-      varBindings :: [(TH.Name, Maybe TH.Type)]
-      varBindings = zip (unKind <$> tyVars) (map Just typeArgs <> repeat Nothing)
+      varBindings1 :: [(TH.Name, Maybe TH.Type)]
+      varBindings1 = mapMaybe (fmap swap . sequence) $ zip (map Just txArgs <> repeat Nothing) (typeVar <$> lhsArgs)
+      varBindings2 :: [(TH.Name, Maybe TH.Type)]
+      varBindings2 = zip (unKind <$> tyVars) (map Just rhsArgs <> repeat Nothing)
+      varBindings = composeBindings varBindings2 varBindings1
   sequenceExps $ sequenceA $ foldMap reifyField fields
 
 reifyScriptInput :: HasCallStack => TypeReifier InputFromScript
@@ -304,6 +308,15 @@ stringLiteral = TH.unsafeCodeCoerce . pure . TH.LitE . TH.StringL
 
 textLiteral :: Text -> TH.Code TH.Q Text
 textLiteral = TH.unsafeCodeCoerce . pure . TH.LitE . TH.StringL . Text.unpack
+
+composeBindings :: [(TH.Name, Maybe TH.Type)] -> [(TH.Name, Maybe TH.Type)] -> [(TH.Name, Maybe TH.Type)]
+composeBindings f g = (mapThrough <$>) <$> f
+  where mapThrough (Just (TH.VarT name)) | Just t <- lookup name g = t
+        mapThrough t = t
+
+typeVar :: TH.Type -> Maybe TH.Name
+typeVar (TH.VarT name) = Just name
+typeVar _ = Nothing
 
 unKind :: TH.TyVarBndr flag -> TH.Name
 unKind (TH.PlainTV name _) = name

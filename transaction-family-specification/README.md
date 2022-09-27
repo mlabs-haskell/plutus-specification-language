@@ -17,12 +17,12 @@ it or open a different terminal to go here. Then `ghcup set ghc 9.2.4` or whiche
 ## Usage
 
 1. In order to depend on the library, you can start by copying the contents of the [`scaffold`](scaffold/) directory.
-2. Then replace and fill out the `DApp`, `TransactionFamily`, and `Token` data ~type~kind declarations, listing as
+2. Then replace and fill out the `MyDApp`, `TransactionFamily`, and `Token` data ~type~kind declarations, listing as
 their constructors respectively the scripts, transactions, and token types present in your dApp.
 3. Write an `instance MintingPolicyScript 'MyMintingPolicy` declaration for every minting policy script listed as a
-   constructor of your `DApp` data kind.
+   constructor of your `MyDApp` data kind.
 4. Write an `instance ValidatorScript 'MyValidator` declaration for every validator script listed as a constructor of
-   your `DApp` data kind.
+   your `MyDApp` data kind.
 5. Write an `instance Transaction 'MyTransaction` declaration for every transaction type listed as a constructor of
    your `TransactionFamily` data kind.
 6. Once everything compiles, you may want to generate some [diagrams](doc/Diagram.md) and check if they make sense.
