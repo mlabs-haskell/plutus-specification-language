@@ -17,6 +17,7 @@ class ValidatorScript s where
   type Currencies s :: [k]
   type Datum s :: Type
   type Redeemer s :: Type
+  type Currencies s = '[]
 
 class MintingPolicyScript s where
   type MintedToken s :: Type

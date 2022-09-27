@@ -1,0 +1,17 @@
+cabal-version: 3.0
+name:          specification
+version:       0.1.0.0
+author:        MLabs
+
+executable diagrams
+  main-is:          Diagrams.hs
+  default-language: Haskell2010
+  other-modules:
+    Spec
+  build-depends:
+    , base           >=4.15 && <5
+    , containers
+    , template-haskell >= 2.17
+    , text
+    , graphviz >= 2999.10
+    , transaction-family-specification == 0.1.*
