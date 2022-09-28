@@ -64,14 +64,14 @@ The remaining type definitions are project-generic and can be added to a library
 ~~~ {.haskell.ignore}
 data TxSpecimen t = TxSpecimen {
   txInputs :: Inputs t TxInputSpecimen WalletSpecimen,
-  txCollateral :: WalletSpecimen "Collateral" '[ 'MinimumRequiredAda ],
+  txCollateral :: WalletSpecimen "Collateral" 'Nothing '[ 'MinimumRequiredAda ],
   txOutputs :: Outputs t TxOutSpecimen WalletSpecimen,
   txMint :: Mints t TxMintSpecimen,
   txValidRange :: !SlotRange,
   txFee :: Value '[ 'MinimumRequiredAda ],
   txSignatures :: Map PubKey Signature}
 
-type TxInputSpecimen :: forall (s :: dapp) -> Redeemer s -> Datum s -> ValueKnownBy dapp -> Type
+type TxInputSpecimen :: forall (s :: dApp) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy dApp -> Type
 data TxInputSpecimen s r d e where
   TxInputSpendingSpecimen :: TxOutSpecimen s d e -> RedeemerSpecimen s r -> TxInputSpecimen s ('Just r) d e
   TxInputReferenceSpecimen :: TxOutSpecimen s d e -> TxInputSpecimen s 'Nothing d e
@@ -80,11 +80,14 @@ type TxMintSpecimen :: forall (mp :: policy) -> MintRedeemer mp -> [MintOf mp] -
 data TxMintSpecimen mp r e = TxMintSpecimen {
   txMintValue :: MintValue e}
 
-data WalletSpecimen name e = WalletSpecimen {
-  walletPubKey :: PubKey,
-  walletValue :: Value e}
+type WalletSpecimen :: Symbol -> Maybe Symbol -> [amount] -> Type
+data WalletSpecimen name datum e = WalletSpecimen
+  { walletPubKey :: PubKey,
+    walletDatum :: WalletDatumValue datum,
+    walletValue :: Value e
+  }
 
-type TxOutSpecimen :: forall (s :: dapp) -> Datum s -> ValueKnownBy dapp -> Type
+type TxOutSpecimen :: forall (s :: dApp) -> Datum s -> ValueKnownBy dApp -> Type
 data TxOutSpecimen s d e = TxOutSpecimen {
   txOutDatum :: DatumSpecimen s d,
   txOutValue :: Value e}
@@ -172,17 +175,17 @@ exampleOracle2Input = TxInputReferenceSpecimen (
     txOutValue = Value ($$(refineTH 1) :$ Proxy @('Token 2) :+ MinimumAda)
                  :: Value '[ 'Exactly 1 ('Token 2), 'MinimumRequiredAda ]})
 
-exampleWallet1Input :: WalletSpecimen "Alice" '[ 'Some ('Token 1) ]
-exampleWallet1Input = WalletSpecimen pubKey1 $ Value ($$(refineTH 60_000) :$ Proxy @('Token 1) :+ Destitute)
+exampleWallet1Input :: WalletSpecimen "Alice" 'Nothing '[ 'Some ('Token 1) ]
+exampleWallet1Input = WalletSpecimen pubKey1 Nothing $ Value ($$(refineTH 60_000) :$ Proxy @('Token 1) :+ Destitute)
 
-exampleWallet2Input :: WalletSpecimen "Bob" '[ 'Some ('Token 2) ]
-exampleWallet2Input = WalletSpecimen pubKey2 (Value $ $$(refineTH 45_000) :$ Proxy @('Token 2) :+ Destitute)
+exampleWallet2Input :: WalletSpecimen "Bob" 'Nothing '[ 'Some ('Token 2) ]
+exampleWallet2Input = WalletSpecimen pubKey2 Nothing (Value $ $$(refineTH 45_000) :$ Proxy @('Token 2) :+ Destitute)
 
-exampleWallet1Output :: WalletSpecimen "Alice" '[ 'Some ('Token 2) ]
-exampleWallet1Output = WalletSpecimen pubKey1 (Value $ $$(refineTH 44_550) :$ Proxy @('Token 2) :+ Destitute)
+exampleWallet1Output :: WalletSpecimen "Alice" 'Nothing '[ 'Some ('Token 2) ]
+exampleWallet1Output = WalletSpecimen pubKey1 Nothing (Value $ $$(refineTH 44_550) :$ Proxy @('Token 2) :+ Destitute)
 
-exampleWallet2Output :: WalletSpecimen "Bob" '[ 'Some ('Token 1) ]
-exampleWallet2Output = WalletSpecimen pubKey2 (Value $ $$(refineTH 59_400) :$ Proxy @('Token 1) :+ Destitute)
+exampleWallet2Output :: WalletSpecimen "Bob" 'Nothing '[ 'Some ('Token 1) ]
+exampleWallet2Output = WalletSpecimen pubKey2 Nothing (Value $ $$(refineTH 59_400) :$ Proxy @('Token 1) :+ Destitute)
 
 pubKey1, pubKey2 :: PubKey
 pubKey1 = "wallet1"
@@ -192,8 +195,8 @@ sig1, sig2 :: Signature
 sig1 = "wallet1sig"
 sig2 = "wallet2sig"
 
-exampleCollateralWallet :: WalletSpecimen "Collateral" '[ 'MinimumRequiredAda ]
-exampleCollateralWallet = WalletSpecimen pubKey2 (Value MinimumAda)
+exampleCollateralWallet :: WalletSpecimen "Collateral" 'Nothing '[ 'MinimumRequiredAda ]
+exampleCollateralWallet = WalletSpecimen pubKey2 Nothing (Value MinimumAda)
 ~~~
 
 <details> On type inference issues

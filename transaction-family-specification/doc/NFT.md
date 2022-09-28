@@ -52,7 +52,7 @@ instance ValidatorScript 'CentralExchange where
 
 type InitializeInputs :: InputsFor ExchangeDApp
 data InitializeInputs s w = InitializeInputs {
-  nftSource :: w "Owner" '[]}
+  nftSource :: w "Owner" 'Nothing '[]}
 type InitializeMints :: MintsFor ExchangeDApp
 data InitializeMints mp = InitializeMints {
   authorization :: mp 'AuthorizingMint '() '[ 'Mint 1 'AuthNFT ]}

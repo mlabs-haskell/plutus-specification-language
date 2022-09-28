@@ -21,6 +21,7 @@ import Data.Functor.Const (Const)
 import Data.Kind (Type)
 import Data.Map (Map)
 import Data.Proxy (Proxy)
+import Data.Void (Void)
 import Data.Typeable (Typeable, typeRep)
 import Family
   ( Datum,
@@ -44,9 +45,17 @@ type family DatumSpecimen s :: Datum s -> Type
 type RedeemerSpecimen :: forall script -> Redeemer script -> Type
 type family RedeemerSpecimen s :: Redeemer s -> Type
 
+type WalletDatumSpecimen :: Symbol -> Type
+type family WalletDatumSpecimen s
+
+type WalletDatumValue :: Maybe Symbol -> Type
+type family WalletDatumValue ms where
+  WalletDatumValue ('Just s) = Maybe (WalletDatumSpecimen s)
+  WalletDatumValue 'Nothing = Maybe Void
+
 data TxSpecimen t = TxSpecimen
   { txInputs :: Inputs t TxInputSpecimen WalletSpecimen,
-    txCollateral :: WalletSpecimen "Collateral" '[ 'MinimumRequiredAda],
+    txCollateral :: WalletSpecimen "Collateral" 'Nothing '[ 'MinimumRequiredAda],
     txOutputs :: Outputs t TxOutSpecimen WalletSpecimen,
     txMint :: Mints t TxMintSpecimen,
     txValidRange :: !SlotRange,
@@ -64,8 +73,10 @@ data TxMintSpecimen mp r e = TxMintSpecimen
   { txMintValue :: MintValue e
   }
 
-data WalletSpecimen name e = WalletSpecimen
+type WalletSpecimen :: Symbol -> Maybe Symbol -> [amount] -> Type
+data WalletSpecimen name datum e = WalletSpecimen
   { walletPubKey :: PubKey,
+    walletDatum :: WalletDatumValue datum,
     walletValue :: Value e
   }
 

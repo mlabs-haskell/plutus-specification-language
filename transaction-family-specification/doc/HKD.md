@@ -66,7 +66,7 @@ type InputFromScriptToTransaction t =
 type OutputToScriptFromTransaction t =
   forall (s :: DApp t) -> Datum s -> ValueKnownBy (DApp t) -> Type
 type MintForTransaction t = forall (mp :: DApp t) -> MintRedeemer mp -> [MintOf mp] -> Type
-type WalletUTxOFor dApp = Symbol -> ValueKnownBy dApp -> Type
+type WalletUTxOFor dApp = Symbol -> Maybe Symbol -> ValueKnownBy dApp -> Type
 
 class Transaction (t :: familie) where
   type Inputs t  :: InputFromScriptToTransaction t -> WalletUTxOFor (DApp t) -> Type
@@ -78,9 +78,9 @@ type NoMints :: forall k -> (forall (mp :: k) -> MintRedeemer mp -> [MintOf mp] 
 data NoMints t mp = NoMints
 
 -- type/kind synonyms to simplify the kind signatures in specifications 
-type InputsFor dApp = (forall (s :: dApp) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy dApp -> Type) -> (Symbol -> ValueKnownBy dApp -> Type) -> Type
+type InputsFor dApp = (forall (s :: dApp) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy dApp -> Type) -> WalletUTxOFor dApp -> Type
 type MintsFor dApp = (forall (mp :: dApp) -> MintRedeemer mp -> [MintOf mp] -> Type) -> Type
-type OutputsFor dApp = (forall (s :: dApp) -> Datum s -> ValueKnownBy dApp -> Type) -> (Symbol -> ValueKnownBy dApp -> Type) -> Type
+type OutputsFor dApp = (forall (s :: dApp) -> Datum s -> ValueKnownBy dApp -> Type) -> WalletUTxOFor dApp -> Type
 ~~~
 
 The core `data TransactionFamily` and `instance ValidatorScript` declarations remain unchanged.
@@ -132,13 +132,13 @@ data ExchangeInputs m n s w = ExchangeInputs {
   exchange :: s 'CentralExchange ('Just '()) '() '[ 'AnythingElse ],
   oracle1 :: s ('Oracle m) 'Nothing '() '[ 'Exactly 1 ('Token m), 'MinimumRequiredAda ],
   oracle2 :: s ('Oracle n) 'Nothing '() '[ 'Exactly 1 ('Token n), 'MinimumRequiredAda ],
-  wallet1 :: w "Alice" '[ 'Some ('Token m) ],
-  wallet2 :: w "Bob" ' [ 'Some ('Token n) ]}
+  wallet1 :: w "Alice" 'Nothing '[ 'Some ('Token m) ],
+  wallet2 :: w "Bob" 'Nothing '[ 'Some ('Token n) ]}
 type ExchangeOutputs :: Natural -> Natural -> OutputsFor ExchangeDApp
 data ExchangeOutputs m n s w = ExchangeOutputs {
   exchange :: s 'CentralExchange '() ['Some ('Token m), 'Some ('Token n), 'AnythingElse],
-  wallet1 :: w "Alice" '[ 'Some ('Token n) ],
-  wallet2 :: w "Bob" '[ 'Some ('Token m) ]}
+  wallet1 :: w "Alice" 'Nothing '[ 'Some ('Token n) ],
+  wallet2 :: w "Bob" 'Nothing '[ 'Some ('Token m) ]}
 instance Transaction ('Exchange m n) where
   type Inputs ('Exchange m n) = ExchangeInputs m n
   type Outputs ('Exchange m n) = ExchangeOutputs m n
@@ -148,7 +148,7 @@ data DrainInputs s w = DrainInputs {
   exchange :: s 'CentralExchange ('Just '()) '() '[ 'AnythingElse ]}
 type DrainOutputs :: OutputsFor ExchangeDApp
 data DrainOutputs s w = DrainOutputs {
-  authority :: w "Owner" '[ 'AnythingElse ],
+  authority :: w "Owner" 'Nothing '[ 'AnythingElse ],
   exchange :: s 'CentralExchange '() '[ 'MinimumRequiredAda ]}
 instance Transaction 'DrainCollectedFees where
   type Inputs 'DrainCollectedFees = DrainInputs

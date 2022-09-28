@@ -54,7 +54,7 @@ instance ValidatorScript 'MyValidator where
 type MyTxInputs :: Symbol -> InputsFor MyDApp
 data MyTxInputs user script wallet = MyTxInputs
   { script :: script 'MyValidator ('Just 'MyRedeemer) 'MyDatum '[ 'AnythingElse ],
-    payment :: wallet user '[ 'Some 'Ada ]
+    payment :: wallet user 'Nothing '[ 'Some 'Ada ]
   }
 
 type MyTxMints :: Natural -> MintsFor MyDApp
@@ -65,7 +65,7 @@ data MyTxMints quantity mp = MyTxMints
 type MyTxOutputs :: Symbol -> Natural -> OutputsFor MyDApp
 data MyTxOutputs user quantity script wallet = MyTxOutputs
   { script :: script 'MyValidator 'MyDatum '[ 'Some 'Ada, 'AnythingElse ],
-    purchase :: wallet user '[ 'Exactly quantity ('OwnMinted 'MyMintedToken) ]
+    purchase :: wallet user 'Nothing '[ 'Exactly quantity ('OwnMinted 'MyMintedToken) ]
   }
 
 instance Transaction (MyTransaction user quantity) where

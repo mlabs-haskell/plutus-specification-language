@@ -58,7 +58,7 @@ type OutputToScriptFromTransaction t =
 
 type MintForTransaction t = forall (mp :: DApp t) -> MintRedeemer mp -> [MintOf mp] -> Type
 
-type WalletUTxOFor dApp = Symbol -> ValueKnownBy dApp -> Type
+type WalletUTxOFor dApp = Symbol -> Maybe Symbol -> ValueKnownBy dApp -> Type
 
 class Transaction (t :: familie) where
   type Inputs t :: InputFromScriptToTransaction t -> WalletUTxOFor (DApp t) -> Type
@@ -70,8 +70,8 @@ type NoMints :: forall k -> (forall (mp :: k) -> MintRedeemer mp -> [MintOf mp] 
 data NoMints t mp = NoMints
 
 -- type/kind synonyms to simplify the kind signatures in specifications
-type InputsFor dApp = (forall (s :: dApp) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy dApp -> Type) -> (Symbol -> ValueKnownBy dApp -> Type) -> Type
+type InputsFor dApp = (forall (s :: dApp) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy dApp -> Type) -> WalletUTxOFor dApp -> Type
 
 type MintsFor dApp = (forall (mp :: dApp) -> MintRedeemer mp -> [MintOf mp] -> Type) -> Type
 
-type OutputsFor dApp = (forall (s :: dApp) -> Datum s -> ValueKnownBy dApp -> Type) -> (Symbol -> ValueKnownBy dApp -> Type) -> Type
+type OutputsFor dApp = (forall (s :: dApp) -> Datum s -> ValueKnownBy dApp -> Type) -> WalletUTxOFor dApp -> Type

@@ -29,6 +29,7 @@ module Family.Diagram (
               effects),
   Wallet (Wallet,
           walletName,
+          datum,
           currencies),
   Currency (Currency),
   transactionTypeGraph,
@@ -105,6 +106,7 @@ data MintOrBurn = MintOrBurn
 
 data Wallet = Wallet
   { walletName :: Text,
+    datum :: Maybe Text,
     currencies :: [Currency]
   }
 
@@ -197,7 +199,7 @@ data NodeId
   | MintingPolicyNamed Text
   | TransactionNamed Text
   | ScriptUTxO {script :: Text, datum :: Text, currencies :: [Currency]}
-  | WalletUTxO Text [Currency]
+  | WalletUTxO Text (Maybe Text) [Currency]
   deriving (Eq, Ord, Show)
 
 newtype TransactionGraph = TransactionGraph {getTransactionGrah :: Gr NodeId Text}
@@ -208,7 +210,8 @@ nodeLabel (ValidatorScriptNamed name) = name
 nodeLabel (WalletNamed name) = name
 nodeLabel (TransactionNamed name) = name
 nodeLabel ScriptUTxO {datum, currencies} = currenciesLabel currencies <> "\n<" <> datum <> ">"
-nodeLabel (WalletUTxO _ currencies) = currenciesLabel currencies
+nodeLabel (WalletUTxO _ Nothing currencies) = currenciesLabel currencies
+nodeLabel (WalletUTxO _ (Just datum) currencies) = currenciesLabel currencies <> "\n<" <> datum <> ">"
 
 currenciesLabel :: [Currency] -> Text
 currenciesLabel = Text.unlines . map currencyName
@@ -274,7 +277,7 @@ replaceFixedNodes mode total (TransactionGraph g) =
       | otherwise = False
     compatibleWith :: NodeId -> NodeId -> Bool
     compatibleWith (ScriptUTxO s1 d1 cs1) (ScriptUTxO s2 d2 cs2) = s1 == s2 && d1 == d2 && cs1 `quantitiesImply` cs2
-    compatibleWith (WalletUTxO u1 cs1) (WalletUTxO u2 cs2) = u1 == u2 && cs1 `quantitiesImply` cs2
+    compatibleWith (WalletUTxO u1 d1 cs1) (WalletUTxO u2 d2 cs2) = u1 == u2 && d1 == d2 && cs1 `quantitiesImply` cs2
     compatibleWith n1 n2 = n1 == n2
     [] `quantitiesImply` [] = True
     _ `quantitiesImply` [Currency "AnythingElse"] = True
@@ -316,13 +319,13 @@ transactionTypeGraph
               (Map.toList scriptInputs)
               isNodes,
             [ (n, transactionNode, name)
-              | (name, Wallet w currencies) <- Map.toList walletInputs,
-                let [(n, _)] = filter ((WalletUTxO w currencies ==) . snd) iwNodes
+              | (name, Wallet w d currencies) <- Map.toList walletInputs,
+                let [(n, _)] = filter ((WalletUTxO w d currencies ==) . snd) iwNodes
             ],
             zipWith (\(name, OutputToScript {}) (n, _) -> (transactionNode, n, name)) (Map.toList scriptOutputs) osNodes,
             [ (transactionNode, n, name)
-              | (name, Wallet w currencies) <- Map.toList walletOutputs,
-                let [(n, _)] = filter ((WalletUTxO w currencies ==) . snd) owNodes
+              | (name, Wallet w d currencies) <- Map.toList walletOutputs,
+                let [(n, _)] = filter ((WalletUTxO w d currencies ==) . snd) owNodes
             ],
             [ (transactionNode, n, redeemer <> " @ " <> mintsLabel effects)
               | (name, MintOrBurn mp redeemer effects) <- Map.toList mints,
@@ -333,7 +336,7 @@ transactionTypeGraph
                 let [(scriptNode, _)] = filter ((ValidatorScriptNamed name ==) . snd) scriptNodes
             ],
             [ (walletNode, n, "")
-              | (n, WalletUTxO name _) <- iwNodes <> owNodes,
+              | (n, WalletUTxO name _ _) <- iwNodes <> owNodes,
                 let [(walletNode, _)] = filter ((WalletNamed name ==) . snd) walletNodes
             ]
           ]
@@ -347,12 +350,12 @@ transactionTypeGraph
           | (n, (name, OutputToScript {toScript, datum, currencies})) <- zip [0 ..] $ Map.toList scriptOutputs
         ]
       iwNodes =
-        [ (nodeTypeRange * n + 3, WalletUTxO walletName currencies)
-          | (n, (name, Wallet {walletName, currencies})) <- zip [0 ..] $ Map.toList walletInputs
+        [ (nodeTypeRange * n + 3, WalletUTxO walletName datum currencies)
+          | (n, (name, Wallet {walletName, datum, currencies})) <- zip [0 ..] $ Map.toList walletInputs
         ]
       owNodes =
-        [ (nodeTypeRange * n + 4, WalletUTxO walletName currencies)
-          | (n, (name, Wallet {walletName, currencies})) <- zip [0 ..] $ Map.toList walletOutputs
+        [ (nodeTypeRange * n + 4, WalletUTxO walletName datum currencies)
+          | (n, (name, Wallet {walletName, datum, currencies})) <- zip [0 ..] $ Map.toList walletOutputs
         ]
       mpNodes =
         [ (nodeTypeRange * n + 5, MintingPolicyNamed name)

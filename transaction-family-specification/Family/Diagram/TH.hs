@@ -123,19 +123,24 @@ reifyScriptInput
           )
           ||]
 reifyScriptInput vars fieldName (TH.AppT TH.ListT itemType) = reifyList reifyScriptInput vars fieldName itemType
-reifyScriptInput vars fieldName (TH.AppT (TH.AppT (TH.VarT w) name) currencies)
+reifyScriptInput vars fieldName (TH.AppT (TH.AppT (TH.AppT (TH.VarT w) _name) _datum) _currencies)
   | (walletVar, _) : _ <- reverse vars, w == walletVar = empty
 reifyScriptInput vars _ t = error (Text.unpack (typeDescription vars t) <> ":\n" <> show t)
 
 reifyWallet :: HasCallStack => TypeReifier Wallet
-reifyWallet vars fieldName (TH.AppT (TH.AppT (TH.VarT w) name) currencies)
+reifyWallet vars fieldName (TH.AppT (TH.AppT (TH.AppT (TH.VarT w) name) datum) currencies)
   | (walletVar, _) : _ <- reverse vars,
     w == walletVar =
       pure
         [||
         ($$fieldName,
-         Wallet $$(textLiteral $ typeDescription vars name <> "'s wallet") $$(currencyDescriptionQuotes vars currencies))
+         Wallet $$(textLiteral $ typeDescription vars name <> "'s wallet") $$(datumValue datum) $$(currencyDescriptionQuotes vars currencies))
         ||]
+  where
+    datumValue (TH.PromotedT name) | name == 'Nothing = [|| Nothing ||]
+    datumValue (TH.AppT (TH.PromotedT name) t) | name == 'Just = [|| Just $$(textLiteral $ typeDescription vars t) ||]
+    datumValue (TH.SigT t _) = datumValue t
+    datumValue t = error ("datumValue " <> show t)
 reifyWallet vars fieldName (TH.AppT TH.ListT itemType) = reifyList reifyWallet vars fieldName itemType
 reifyWallet
   vars
@@ -187,7 +192,7 @@ reifyScriptOutput
           )
           ||]
 reifyScriptOutput vars fieldName (TH.AppT TH.ListT itemType) = reifyList reifyScriptOutput vars fieldName itemType
-reifyScriptOutput vars fieldName (TH.AppT (TH.AppT (TH.VarT w) name) currencies)
+reifyScriptOutput vars fieldName (TH.AppT (TH.AppT (TH.AppT (TH.VarT w) _name) _datum) _currencies)
   | (walletVar, _) : _ <- reverse vars, w == walletVar = empty
 reifyScriptOutput vars _ t = error (Text.unpack (typeDescription vars t) <> ":\n" <> show t)
 

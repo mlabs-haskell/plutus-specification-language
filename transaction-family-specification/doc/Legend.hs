@@ -47,7 +47,7 @@ data TransactionInputs s w = TransactionInputs
         ('Just 'ValidatorRedeemer)
         'ValidatorDatum
         '[ 'Family.Some ('MintedToken 'MPToken), 'Family.Some 'OtherToken],
-    walletInput :: w "User" '[ 'Family.Some ('MintedToken 'MPToken)]
+    walletInput :: w "User" 'Nothing '[ 'Family.Some ('MintedToken 'MPToken)]
   }
 
 type TransactionMints :: Family.MintsFor DApp
@@ -59,7 +59,7 @@ type TransactionOutputs :: Family.OutputsFor DApp
 data TransactionOutputs s w = TransactionOutputs
   { scriptOutput ::
       s 'ValidatorScript 'ValidatorDatum '[ 'Family.Some ('MintedToken 'MPToken), 'Family.Some 'OtherToken],
-    walletOutput :: w "User" '[ 'Family.Some 'OtherToken]
+    walletOutput :: w "User" 'Nothing '[ 'Family.Some 'OtherToken]
   }
 
 instance Family.Transaction 'Transaction where
