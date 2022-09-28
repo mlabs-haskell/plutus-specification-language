@@ -223,7 +223,7 @@ mintsLabel = Text.intercalate ", " . map describe
 combineTransactionGraphs :: OverlayMode -> [TransactionGraph] -> TransactionGraph
 combineTransactionGraphs mode gs = replaceFixedNodes mode totalNodeCount (TransactionGraph graphUnion)
   where graphUnion = gconcat $ getTransactionGrah <$> gs
-        totalNodeCount = snd (nodeRange graphUnion) `div` 8 + 1
+        totalNodeCount = snd (nodeRange graphUnion) `div` nodeTypeRange + 1
 
 replaceFixedNodes :: OverlayMode -> Int -> TransactionGraph -> TransactionGraph
 replaceFixedNodes mode total (TransactionGraph g) =
@@ -275,7 +275,7 @@ gconcat gs = mkGraph allNodes allEdges where
   (_, allNodes, allEdges) = foldl' addGraph (0, [], []) gs
   addGraph :: (Int, [(Int, a)], [(Int, Int, b)]) -> Gr a b -> (Int, [(Int, a)], [(Int, Int, b)])
   addGraph (maxNodeId, nodes, edges) g =
-    (maxNodeId + 8 * (snd (nodeRange g) `div` 8 + 1),
+    (maxNodeId + nodeTypeRange * (snd (nodeRange g) `div` nodeTypeRange + 1),
      map (first (maxNodeId +)) (labNodes g) ++ nodes,
      map (firstTwo (maxNodeId +)) (labEdges g) ++ edges)
   firstTwo f (a, b, c) = (f a, f b, c)
