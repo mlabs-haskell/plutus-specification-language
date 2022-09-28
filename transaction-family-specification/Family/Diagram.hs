@@ -35,6 +35,8 @@ module Family.Diagram (
   combineTransactionGraphs,
   transactionGraphToDot) where
 
+import qualified Data.Char as Char
+import Control.Applicative ((<|>))
 import Control.Arrow ((&&&))
 import Data.Bifunctor (first, second)
 import Data.Foldable (toList)
@@ -250,7 +252,7 @@ replaceFixedNodes mode total (TransactionGraph g) =
     targetUTxO :: (Int, NodeId) -> Maybe (Int, Int)
     targetUTxO (n, node)
       | nodeType n `elem` [TransactionInputFromScript, TransactionInputFromWallet], -- input UTxOs
-        (Just ([(_, address)], _, _, [(_, trans)]), _) <- match n g', -- address and transaction consuming the UTxO
+        (Just ((_, address):_, _, _, (_, trans):_), _) <- match n g', -- address and transaction consuming the UTxO
         (Just ([], _, _, utxos), _) <- match address g', -- all UTxOs at the address
         (_, n') : _ <-
           reverse $
@@ -266,8 +268,27 @@ replaceFixedNodes mode total (TransactionGraph g) =
     matchingOutput n inputNode address trans n'
       | nodeType n' `elem` [TransactionOutputToScript, TransactionOutputToWallet],
         (Just (ins, _, outputNode, []), _) <- match n' g',
-        [(_, trans')] <- filter ((< address) . snd) ins =
-          inputNode == outputNode && trans' < trans
+        [(_, trans')] <- filter ((< address `min` trans) . snd) ins =
+          inputNode `compatibleWith` outputNode && (trans' < trans
+                                                    || error (show (inputNode, outputNode, trans, trans')))
+      | otherwise = False
+    compatibleWith :: NodeId -> NodeId -> Bool
+    compatibleWith (ScriptUTxO s1 d1 cs1) (ScriptUTxO s2 d2 cs2) = s1 == s2 && d1 == d2 && cs1 `quantitiesImply` cs2
+    compatibleWith (WalletUTxO u1 cs1) (WalletUTxO u2 cs2) = u1 == u2 && cs1 `quantitiesImply` cs2
+    compatibleWith n1 n2 = n1 == n2
+    [] `quantitiesImply` [] = True
+    _ `quantitiesImply` [Currency "AnythingElse"] = True
+    (Currency c1 : cs1) `quantitiesImply` (Currency c2 : cs2) = c1 `quantityImplies` c2 && cs1 `quantitiesImply` cs2
+    _ `quantitiesImply` _ = False
+    c1 `quantityImplies` c2@"MinimumRequiredAda" = c1 == c2 || "RequiredAdaPlus " `Text.isPrefixOf` c1
+    c1 `quantityImplies` c2
+      | c1 == c2 = True
+      | Just c2' <- Text.stripPrefix "Some " c2,
+        Just c1' <- (Text.stripPrefix "Exactly " c1
+                     <|> Text.stripPrefix "AtLeast " c1
+                     <|> Text.stripPrefix "AtMost " c1)
+                    >>= Text.stripPrefix " " . Text.dropWhile Char.isDigit =
+          c1' == c2'
       | otherwise = False
 
 gconcat :: [Gr a b] -> Gr a b
