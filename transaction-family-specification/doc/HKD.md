@@ -25,9 +25,10 @@ reusable declarations into a library module:
 module Family where
 
 class ValidatorScript s where
-  type Currencies s :: [k]
   type Datum s    :: Type
   type Redeemer s :: Type
+  type Currencies s :: [k] -- ^ optional, used purely for documentational purposes and not checked
+  type Currencies s = '[]
 
 class MintingPolicyScript s where
   type MintedToken s  :: Type

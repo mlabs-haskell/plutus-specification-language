@@ -26,7 +26,6 @@ type instance Family.Economy DApp = Token
 type instance Family.DApp (t :: Family) = DApp
 
 instance Family.ValidatorScript 'ValidatorScript where
-  type Currencies 'ValidatorScript = ['MintedToken 'MPToken, 'OtherToken]
   type Datum 'ValidatorScript = ValidatorDatum
   type Redeemer 'ValidatorScript = ValidatorRedeemer
 

@@ -14,9 +14,9 @@ import Data.Typeable (Typeable)
 import GHC.TypeLits (Natural, Symbol)
 
 class ValidatorScript s where
-  type Currencies s :: [k]
   type Datum s :: Type
   type Redeemer s :: Type
+  type Currencies s :: [k] -- ^ optional, used purely for documentational purposes and not checked
   type Currencies s = '[]
 
 class MintingPolicyScript s where
