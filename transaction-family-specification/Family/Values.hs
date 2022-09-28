@@ -54,7 +54,7 @@ data TxSpecimen t = TxSpecimen
     txSignatures :: Map PubKey Signature
   }
 
-type TxInputSpecimen :: forall (s :: dapp) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy dapp -> Type
+type TxInputSpecimen :: forall (s :: dApp) -> Maybe (Redeemer s) -> Datum s -> ValueKnownBy dApp -> Type
 data TxInputSpecimen s r d e where
   TxInputSpendingSpecimen :: TxOutSpecimen s d e -> RedeemerSpecimen s r -> TxInputSpecimen s ('Just r) d e
   TxInputReferenceSpecimen :: TxOutSpecimen s d e -> TxInputSpecimen s 'Nothing d e
@@ -69,7 +69,7 @@ data WalletSpecimen name e = WalletSpecimen
     walletValue :: Value e
   }
 
-type TxOutSpecimen :: forall (s :: dapp) -> Datum s -> ValueKnownBy dapp -> Type
+type TxOutSpecimen :: forall (s :: dApp) -> Datum s -> ValueKnownBy dApp -> Type
 data TxOutSpecimen s d e = TxOutSpecimen
   { txOutDatum :: DatumSpecimen s d,
     txOutValue :: Value e
