@@ -265,15 +265,14 @@ replaceFixedNodes mode total (TransactionGraph g) =
           Just (n, n')
       | nodeType n `elem` [MintingPolicy, ScriptAddress, WalletAddress] = (,) n <$> Map.lookup node nodeIdMap
       | otherwise = Nothing
-    -- \| given an input UTxO, its address, transaction consuming it, and another UTxO,
-    -- decide if the latter UTxO can serve as the former
+    -- Given an input UTxO, its address, transaction consuming it, and another UTxO, decide if the latter UTxO can
+    -- serve as the former.
     matchingOutput :: Int -> NodeId -> Int -> Int -> Int -> Bool
     matchingOutput n inputNode address trans n'
       | nodeType n' `elem` [TransactionOutputToScript, TransactionOutputToWallet],
         (Just (ins, _, outputNode, []), _) <- match n' g',
-        [(_, trans')] <- filter ((< address `min` trans) . snd) ins =
-          inputNode `compatibleWith` outputNode && (trans' < trans
-                                                    || error (show (inputNode, outputNode, trans, trans')))
+        [(_, trans')] <- filter ((< address `min` trans) . snd) ins
+      = outputNode `compatibleWith` inputNode
       | otherwise = False
     compatibleWith :: NodeId -> NodeId -> Bool
     compatibleWith (ScriptUTxO s1 d1 cs1) (ScriptUTxO s2 d2 cs2) = s1 == s2 && d1 == d2 && cs1 `quantitiesImply` cs2
