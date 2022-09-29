@@ -76,6 +76,10 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Family (MintQuantity (Burn, BurnSome, Mint, MintOrBurnSome, MintSome), Transaction)
 
+-- | Composable graph of a single or multiple transactions.
+newtype TransactionGraph = TransactionGraph {getTransactionGrah :: Gr NodeId Text}
+
+-- | Intermediate data structure to describe a 'Transaction' instance, before it's turned into a 'TransactionGraph'.
 data TransactionTypeDiagram = TransactionTypeDiagram
   { transactionName :: Text,
     scriptInputs :: Map Text InputFromScript,
@@ -86,6 +90,7 @@ data TransactionTypeDiagram = TransactionTypeDiagram
   }
   deriving (Eq, Show)
 
+-- | A field of 'Transaction' 'Inputs' that's coming from a script
 data InputFromScript = InputFromScript
   { fromScript :: Text,
     redeemer :: Maybe Text,
@@ -94,6 +99,7 @@ data InputFromScript = InputFromScript
   }
   deriving (Eq, Show)
 
+-- | A field of 'Transaction' 'Outputs' that's going to a script
 data OutputToScript = OutputToScript
   { toScript :: Text,
     datum :: Text,
@@ -101,6 +107,7 @@ data OutputToScript = OutputToScript
   }
   deriving (Eq, Show)
 
+-- | A field of 'Transaction' 'Mints'
 data MintOrBurn = MintOrBurn
   { mintingPolicy :: Text,
     redeemer :: Text,
@@ -108,6 +115,7 @@ data MintOrBurn = MintOrBurn
   }
   deriving (Eq, Show)
 
+-- | A field of 'Transaction' 'Inputs' or 'Outputs' that refers to a wallet UTxO
 data Wallet = Wallet
   { walletName :: Text,
     datum :: Maybe Text,
@@ -140,6 +148,7 @@ isTransaction = (== Transaction) . nodeType
 isScriptUTxO :: Int -> Bool
 isScriptUTxO = (`elem` [TransactionInputFromScript, TransactionOutputToScript]) . nodeType
 
+-- | Render a 'TransactionGraph' to Graphviz 'DotGraph' with the given caption.
 transactionGraphToDot :: Text -> TransactionGraph -> DotGraph Int
 transactionGraphToDot caption (TransactionGraph g) = graphToDot params g'
   where
@@ -196,7 +205,10 @@ transactionGraphToDot caption (TransactionGraph g) = graphToDot params g'
             (MintingPolicy, _) -> noCluster
             (Transaction, _) -> noCluster
 
-data OverlayMode = Distinct | Parallel | Serial deriving (Eq, Ord, Show)
+data OverlayMode = Distinct -- ^ the subgraphs won't share any UTxO nodes when combined 
+                 | Parallel -- ^ the subgraphs will share all compatible UTxO nodes when combined
+                 | Serial   -- ^ a later transaction's input may reuse an older transaction's output if compatible
+                 deriving (Eq, Ord, Show)
 
 data NodeId
   = ValidatorScriptNamed Text
@@ -206,8 +218,6 @@ data NodeId
   | ScriptUTxO {script :: Text, datum :: Text, currencies :: [Currency]}
   | WalletUTxO Text (Maybe Text) [Currency]
   deriving (Eq, Ord, Show)
-
-newtype TransactionGraph = TransactionGraph {getTransactionGrah :: Gr NodeId Text}
 
 nodeLabel :: NodeId -> Text
 nodeLabel (MintingPolicyNamed name) = name
@@ -230,6 +240,7 @@ mintsLabel = Text.intercalate ", " . map describe
     describe (MintSome c) = "mint " <> currencyName c
     describe (MintOrBurnSome c) = "mint or burn " <> currencyName c
 
+-- | Combine multiple transaction graphs into a single one.
 combineTransactionGraphs :: OverlayMode -> [TransactionGraph] -> TransactionGraph
 combineTransactionGraphs mode gs = replaceFixedNodes mode totalNodeCount (TransactionGraph graphUnion)
   where graphUnion = gconcat $ getTransactionGrah <$> gs
@@ -344,29 +355,29 @@ transactionTypeGraph
                 let [(walletNode, _)] = filter ((WalletNamed name ==) . snd) walletNodes
             ]
           ]
-      transactionNode = 0
+      transactionNode = fromEnum Transaction
       isNodes =
-        [ (nodeTypeRange * n + 1, ScriptUTxO fromScript datum currencies)
+        [ (nodeTypeRange * n + fromEnum TransactionInputFromScript, ScriptUTxO fromScript datum currencies)
           | (n, (name, InputFromScript {fromScript, datum, currencies})) <- zip [0 ..] $ Map.toList scriptInputs
         ]
       osNodes =
-        [ (nodeTypeRange * n + 2, ScriptUTxO toScript datum currencies)
+        [ (nodeTypeRange * n + fromEnum TransactionOutputToScript, ScriptUTxO toScript datum currencies)
           | (n, (name, OutputToScript {toScript, datum, currencies})) <- zip [0 ..] $ Map.toList scriptOutputs
         ]
       iwNodes =
-        [ (nodeTypeRange * n + 3, WalletUTxO walletName datum currencies)
+        [ (nodeTypeRange * n + fromEnum TransactionInputFromWallet, WalletUTxO walletName datum currencies)
           | (n, (name, Wallet {walletName, datum, currencies})) <- zip [0 ..] $ Map.toList walletInputs
         ]
       owNodes =
-        [ (nodeTypeRange * n + 4, WalletUTxO walletName datum currencies)
+        [ (nodeTypeRange * n + fromEnum TransactionOutputToWallet, WalletUTxO walletName datum currencies)
           | (n, (name, Wallet {walletName, datum, currencies})) <- zip [0 ..] $ Map.toList walletOutputs
         ]
       mpNodes =
-        [ (nodeTypeRange * n + 5, MintingPolicyNamed name)
+        [ (nodeTypeRange * n + fromEnum MintingPolicy, MintingPolicyNamed name)
           | (n, name) <- zip [0 ..] $ nub $ mintingPolicy . snd <$> Map.toList mints
         ]
       scriptNodes =
-        [ (nodeTypeRange * n + 6, ValidatorScriptNamed name)
+        [ (nodeTypeRange * n + fromEnum ScriptAddress, ValidatorScriptNamed name)
           | (n, name) <-
               zip [0 ..] $
                 nub $
@@ -374,7 +385,7 @@ transactionTypeGraph
                     Map.toList (fromScript <$> scriptInputs) <> Map.toList (toScript <$> scriptOutputs)
         ]
       walletNodes =
-        [ (nodeTypeRange * n + 7, WalletNamed name)
+        [ (nodeTypeRange * n + fromEnum WalletAddress, WalletNamed name)
           | (n, name) <- zip [0 ..] $ nub $
               walletName . snd <$> Map.toList walletInputs <> Map.toList walletOutputs
         ]
