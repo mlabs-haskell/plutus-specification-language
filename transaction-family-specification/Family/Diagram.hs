@@ -84,6 +84,7 @@ data TransactionTypeDiagram = TransactionTypeDiagram
     walletOutputs :: Map Text Wallet,
     mints :: Map Text MintOrBurn
   }
+  deriving (Eq, Show)
 
 data InputFromScript = InputFromScript
   { fromScript :: Text,
@@ -91,24 +92,28 @@ data InputFromScript = InputFromScript
     datum :: Text,
     currencies :: [Currency]
   }
+  deriving (Eq, Show)
 
 data OutputToScript = OutputToScript
   { toScript :: Text,
     datum :: Text,
     currencies :: [Currency]
   }
+  deriving (Eq, Show)
 
 data MintOrBurn = MintOrBurn
   { mintingPolicy :: Text,
     redeemer :: Text,
     effects :: [MintQuantity Text Currency]
   }
+  deriving (Eq, Show)
 
 data Wallet = Wallet
   { walletName :: Text,
     datum :: Maybe Text,
     currencies :: [Currency]
   }
+  deriving (Eq, Show)
 
 newtype Currency = Currency {currencyName :: Text} deriving (Eq, Ord, IsString, Show)
 
@@ -366,9 +371,10 @@ transactionTypeGraph
               zip [0 ..] $
                 nub $
                   map snd $
-                    Map.toList ((fromScript <$> scriptInputs) <> (toScript <$> scriptOutputs))
+                    Map.toList (fromScript <$> scriptInputs) <> Map.toList (toScript <$> scriptOutputs)
         ]
       walletNodes =
         [ (nodeTypeRange * n + 7, WalletNamed name)
-          | (n, name) <- zip [0 ..] $ nub $ map snd $ Map.toList (walletName <$> walletInputs <> walletOutputs)
+          | (n, name) <- zip [0 ..] $ nub $
+              walletName . snd <$> Map.toList walletInputs <> Map.toList walletOutputs
         ]

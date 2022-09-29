@@ -37,6 +37,7 @@ data MintQuantity count currency
   | MintSome currency
   | BurnSome currency
   | MintOrBurnSome currency
+  deriving (Eq, Show)
 
 type ValueKnownBy dApp = [Quantity (Economy dApp)]
 
