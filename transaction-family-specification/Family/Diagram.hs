@@ -246,6 +246,7 @@ combineTransactionGraphs mode gs = replaceFixedNodes mode totalNodeCount (Transa
   where graphUnion = gconcat $ getTransactionGrah <$> gs
         totalNodeCount = snd (nodeRange graphUnion) `div` nodeTypeRange + 1
 
+-- | Unify the shareable nodes in a transaction graph.
 replaceFixedNodes :: OverlayMode -> Int -> TransactionGraph -> TransactionGraph
 replaceFixedNodes mode total (TransactionGraph g) =
   TransactionGraph $ mkGraph (sortOn (Down . fst) $ first switchNode <$> labNodes g) (switchEnds <$> labEdges g)
@@ -253,42 +254,38 @@ replaceFixedNodes mode total (TransactionGraph g) =
     TransactionGraph g' = replaceFixedNodes Distinct total (TransactionGraph g)
     switchEnds (start, end, label) = (switchNode start, switchNode end, label)
     switchNode n = IntMap.findWithDefault n n nodeMap
+    -- | the initial node mapping, shifting to fresh IDs all scripts and wallets across all transactions, and for
+    -- 'Parallel' mode the UTxOs as well
     nodeIdMap :: Map NodeId Int
-    nodeIdMap = case mode of
-      Parallel -> foldMap nodeMapOfType [TransactionInputFromScript .. WalletAddress]
-      _ -> foldMap nodeMapOfType [MintingPolicy, ScriptAddress, WalletAddress]
-    nodeMapOfType :: NodeType -> Map NodeId Int
-    nodeMapOfType n =
+    nodeIdMap = foldMap nodeIdMapOfType $ case mode of
+      Parallel -> [TransactionInputFromScript .. WalletAddress]
+      _ -> [MintingPolicy, ScriptAddress, WalletAddress]
+    nodeIdMapOfType :: NodeType -> Map NodeId Int
+    nodeIdMapOfType n =
       Map.fromList (zip (nodesOfType n g) $ (nodeTypeRange * total +) <$> [fromEnum n, fromEnum n + nodeTypeRange ..])
     nodesOfType :: NodeType -> Gr NodeId Text -> [NodeId]
     nodesOfType t g = snd <$> filter ((t ==) . nodeType . fst) (labNodes g)
+    -- | the final node mapping, unifying the node IDs according to the given 'OverlayMode'
     nodeMap :: IntMap Int
-    nodeMap = case mode of
-      Serial -> IntMap.fromList $ mapMaybe targetUTxO $ labNodes g
-      _ -> IntMap.fromList $ mapMaybe targetNode $ labNodes g
-    targetNode :: (Int, NodeId) -> Maybe (Int, Int)
-    targetNode (n, node) = (,) n <$> Map.lookup node nodeIdMap
-    targetUTxO :: (Int, NodeId) -> Maybe (Int, Int)
-    targetUTxO (n, node)
+    nodeMap = IntMap.fromList $ mapMaybe targetNode $ labNodes g
+    targetNode (n, node)
       | nodeType n `elem` [TransactionInputFromScript, TransactionInputFromWallet], -- input UTxOs
+        mode == Serial,
         (Just ((_, address):_, _, _, (_, trans):_), _) <- match n g', -- address and transaction consuming the UTxO
         (Just ([], _, _, utxos), _) <- match address g', -- all UTxOs at the address
         (_, n') : _ <-
-          reverse $
-            filter (matchingOutput n node address trans . snd) $
-              takeWhile ((< n) . snd) $
-                sortOn snd utxos =
-          Just (n, n')
-      | nodeType n `elem` [MintingPolicy, ScriptAddress, WalletAddress] = (,) n <$> Map.lookup node nodeIdMap
-      | otherwise = Nothing
+          filter (matchingOutput n node address trans . snd) $
+            dropWhile ((>= n) . snd) $
+              sortOn (Down . snd) utxos
+      = Just (n, n')
+      | otherwise = (,) n <$> Map.lookup node nodeIdMap
     -- Given an input UTxO, its address, transaction consuming it, and another UTxO, decide if the latter UTxO can
     -- serve as the former.
     matchingOutput :: Int -> NodeId -> Int -> Int -> Int -> Bool
     matchingOutput n inputNode address trans n'
       | nodeType n' `elem` [TransactionOutputToScript, TransactionOutputToWallet],
-        (Just (ins, _, outputNode, []), _) <- match n' g',
-        [(_, trans')] <- filter ((< address `min` trans) . snd) ins
-      = outputNode `compatibleWith` inputNode
+        (Just (ins, _, outputNode, []), _) <- match n' g'
+      = any ((< trans) . snd) ins && outputNode `compatibleWith` inputNode
       | otherwise = False
     compatibleWith :: NodeId -> NodeId -> Bool
     compatibleWith (ScriptUTxO s1 d1 cs1) (ScriptUTxO s2 d2 cs2) = s1 == s2 && d1 == d2 && cs1 `quantitiesImply` cs2
