@@ -36,10 +36,10 @@ module Family.Diagram (
   combineTransactionGraphs,
   transactionGraphToDot) where
 
-import qualified Data.Char as Char
 import Control.Applicative ((<|>))
 import Control.Arrow ((&&&))
 import Data.Bifunctor (first, second)
+import qualified Data.Char as Char
 import Data.Foldable (toList)
 import Data.Graph.Inductive (Context, Gr, empty, gmap, lab, labEdges, labNodes, match, mkGraph, nodeRange)
 import Data.GraphViz
@@ -74,6 +74,7 @@ import Data.Ord (Down (Down))
 import Data.String (IsString)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Read as Text.Read
 import Family (MintQuantity (Burn, BurnSome, Mint, MintOrBurnSome, MintSome), Transaction)
 
 -- | Composable graph of a single or multiple transactions.
@@ -304,7 +305,14 @@ replaceFixedNodes mode total (TransactionGraph g) =
                      <|> Text.stripPrefix "AtMost " c1)
                     >>= Text.stripPrefix " " . Text.dropWhile Char.isDigit =
           c1' == c2'
+      | Just (n2, c2') <- Text.stripPrefix "AtLeast " c2 >>= maybeDecimal,
+        Just (n1, c1') <- (Text.stripPrefix "Exactly " c1 <|> Text.stripPrefix "AtLeast " c1) >>= maybeDecimal =
+          c1' == c2' && n1 <= n2
+      | Just (n2, c2') <- Text.stripPrefix "AtMost " c2 >>= maybeDecimal,
+        Just (n1, c1') <- (Text.stripPrefix "Exactly " c1 <|> Text.stripPrefix "AtMost " c1) >>= maybeDecimal =
+          c1' == c2' && n1 >= n2
       | otherwise = False
+      where maybeDecimal = either (const Nothing) Just . Text.Read.decimal
 
 gconcat :: [Gr a b] -> Gr a b
 gconcat gs = mkGraph allNodes allEdges where
