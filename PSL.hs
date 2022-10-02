@@ -7,7 +7,7 @@
 module PSL where
 
 import Data.Proxy (Proxy (Proxy))
-import MonoidDo
+import MonoidDo qualified
 import Plutarch.Core
 import Plutarch.PType
 import Plutarch.Prelude
@@ -23,7 +23,7 @@ x = pcon PTrue
  representation. Not intended to be used directly!
 
  @
- data PSth (ef :: PTypeF) ... deriving (PHasRepr) via (PIsPrimitive)
+ data PSth (ef :: PTypeF) ... deriving (PHasRepr) via PIsPrimitive
  @
 -}
 data PIsPrimitive (ef :: PTypeF)
@@ -31,27 +31,27 @@ data PIsPrimitive (ef :: PTypeF)
 instance PHasRepr PIsPrimitive where
   type PReprSort _ = PReprPrimitive
 
-data PInteger (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PInteger (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data PValue (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PValue (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data PUTXO (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PUTXO (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data PUTXORef (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PUTXORef (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data PTokenName (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PTokenName (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data PCurrencySymbol (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PCurrencySymbol (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data PTimeRange (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PTimeRange (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data PPubKeyHash (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PPubKeyHash (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data PAddress (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PAddress (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data PDCert (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PDCert (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data PByteString (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PByteString (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
 data PData (ef :: PTypeF)
   = PDataConstr (Pf ef PInteger) (Pf ef (PList PData))
@@ -59,7 +59,7 @@ data PData (ef :: PTypeF)
   | PDataList (Pf ef (PList PData))
   | PDataInteger (Pf ef PInteger)
   | PDataByteString (Pf ef PByteString)
-  deriving (PHasRepr) via (PIsPrimitive)
+  deriving (PHasRepr) via PIsPrimitive
 
 data POwnUTXO d (ef :: PTypeF) = POwnUTXO
   { value :: Pf ef PValue
@@ -68,7 +68,7 @@ data POwnUTXO d (ef :: PTypeF) = POwnUTXO
   deriving stock (Generic)
   deriving anyclass (PHasRepr)
 
-data PDiagram (datum :: PType) (ef :: PTypeF) deriving (PHasRepr) via (PIsPrimitive)
+data PDiagram (datum :: PType) (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
 class (forall a. PConstructable edsl a => PConstructable edsl (f a)) => PConstructable2 edsl f
 
@@ -77,10 +77,10 @@ instance (forall a. PConstructable edsl a => PConstructable edsl (f a)) => PCons
 data PList a ef
   = PNil
   | PCons (ef /$ a) (ef /$ PList a)
-  deriving (PHasRepr) via (PIsPrimitive)
+  deriving (PHasRepr) via PIsPrimitive
 
 data PNat f = PZ | PS (Pf f PNat)
-  deriving (PHasRepr) via (PIsPrimitive)
+  deriving (PHasRepr) via PIsPrimitive
 
 instance PConstructable edsl PNat => Num (Term edsl PNat) where
   fromInteger 0 = pcon PZ
@@ -92,8 +92,11 @@ class
   , (forall d. IsPType edsl d => IsPType edsl (PDiagram d))
   , Monoid (Term edsl PValue)
   , PDSL edsl
-  , PSOP edsl
   , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructable' edsl (a #-> b)
+  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructable' edsl (PPair a b)
+  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructable' edsl (PEither a b)
+  , forall a. (PIsSOP edsl a) => PConstructable' edsl (PSOPed a)
+  , PConstructable' edsl PUnit
   , IsPType edsl PInteger
   , -- forall f. PConstructable2 edsl f => PConstructable edsl (PFix f),
     IsPType edsl PValue
@@ -111,6 +114,10 @@ class
   ) =>
   PPSL edsl
   where
+  -- input: WalletInput (pkh, value), ProtocolInput (sh, datum, value), OwnInput (datum, redeemer, value)
+  -- output: WalletOutput (pkh, value), ProtocolOutput (sh, datum, value), OwnOutput (datum, value)
+  -- mint: MintOwn (token, int), Mint (symbol, token, int)
+  -- other: DCert (cert), ValidIn (range), SignedBy (pkh)
   requireInput :: Term edsl PUTXORef -> Term edsl (PDiagram d)
   requireOwnInput :: Term edsl (POwnUTXO d) -> Term edsl (PDiagram d)
   createOwnOutput :: Term edsl (POwnUTXO d) -> Term edsl (PDiagram d)
@@ -128,7 +135,7 @@ class
   emptyValue :: Term edsl PValue
   mkValue :: Term edsl PCurrencySymbol -> Term edsl PTokenName -> Term edsl PInteger -> Term edsl PValue
   mkAda :: Term edsl PInteger -> Term edsl PValue
-  mkOwnValue :: Term edsl PTokenName -> Term edsl PInteger
+  mkOwnValue :: Term edsl PTokenName -> Term edsl PInteger -> Term edsl PValue
 
 data Specification d where
   Specification ::
