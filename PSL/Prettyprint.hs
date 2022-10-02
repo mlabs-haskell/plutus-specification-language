@@ -74,7 +74,7 @@ class (IsPType (PK m) a) => TypeInfo m a
 instance (IsPType (PK m) a) => TypeInfo m a
 
 typeInfo :: forall m a. TypeInfo m a => Proxy m -> Proxy a -> PprType
-typeInfo pm _ = isPType (Proxy @(PK m)) (Proxy @a) (\pa -> typeReprInfo pm pa)
+typeInfo pm _ = isPType (Proxy @(PK m)) (Proxy @a) (typeReprInfo pm)
 
 instance PDSL (PK m) where
   type IsPTypeBackend (PK m) = TypeReprInfo m
@@ -140,7 +140,7 @@ getCurrentVar = do
   pure $ PprBind lvl nm
 
 bound :: Text -> PprM m a -> PprM m a
-bound nm m = local (\(l, _) -> (l + 1, nm)) m
+bound nm = local (\(l, _) -> (l + 1, nm))
 
 call :: Applicative m => Text -> [PprM m PprTerm] -> PprM m PprTerm
 call nm args = PprCall nm <$> sequenceA args
@@ -221,7 +221,7 @@ instance (TypeInfo m a, Monad m) => PConstructable' (PK m) (PList a) where
     n' <- n
     bound "list" do
       var <- getCurrentVar
-      matchNil <- runTerm $ f $ PNil
+      matchNil <- runTerm $ f PNil
       matchCons <- runTerm $ f $ PCons (proj var "hd") (proj var "tl")
       pure $ PprMatch n' var [("Z", matchNil), ("S", matchCons)]
 
@@ -233,40 +233,32 @@ instance Monad m => PConstructable' (PK m) PNat where
     n' <- n
     bound "nat" do
       var <- getCurrentVar
-      matchZ <- runTerm $ f $ PZ
-      matchS <- runTerm $ f $ PS (proj var "pred")
+      matchZ <- runTerm . f $ PZ
+      matchS <- runTerm . f $ PS (proj var "pred")
       pure $ PprMatch n' var [("Z", matchZ), ("S", matchS)]
 
--- TODO
-
 instance (Monad m, PIsSOP (PK m) a) => PConstructable' (PK m) (PSOPed a) where
-  pconImpl (PSOPed (x :: a f)) = case esop (Proxy @(PK m)) (Proxy @a) of
-    PIsSumR _ _ from -> Ppr $ do
-      let i = from $ SOP.gfrom x
-      let conName = T.pack $ gsFindConName (SOP.constructorInfo $ SOP.gdatatypeInfo $ Proxy @(a f)) i
-      xs <-
-        sequence
-          . SOP.collapse_SOP
-          $ SOP.cmap_SOP (Proxy @(IsPType (PK m))) (SOP.K . runTerm) i
-      pure $ PprCall conName xs
-  pmatchImpl (Ppr x) (f :: PSOPed a f -> Term (PK m) b) = case esop (Proxy @(PK m)) (Proxy @a) of
-    PIsSumR (_ :: Proxy inner) to _ -> term $ bound "c" do
-      x' <- x
-      var <- getCurrentVar
-      let conNames = SOP.collapse_NP $ SOP.map_NP (SOP.K . T.pack . SOP.constructorName) $ SOP.constructorInfo $ SOP.gdatatypeInfo (Proxy @(a f))
-      xs <-
-        sequence
-          . fmap (\x -> runTerm (f . PSOPed . SOP.gto $ to x))
-          . SOP.apInjs_POP
-          $ gpAllConProjs (SOP.constructorInfo . SOP.gdatatypeInfo $ Proxy @(a f)) (PprVar var)
-      pure $ PprMatch x' var (zip conNames xs)
+  pconImpl (PSOPed (x :: a f)) = Ppr $ do
+    let i = sopFrom (Proxy @(PK m)) (Proxy @a) $ SOP.gfrom x
+    let conName = T.pack $ gsFindConName (SOP.constructorInfo $ SOP.gdatatypeInfo $ Proxy @(a f)) i
+    xs <-
+      sequence
+        . SOP.collapse_SOP
+        $ SOP.cmap_SOP (Proxy @(IsPType (PK m))) (SOP.K . runTerm) i
+    pure $ PprCall conName xs
+  pmatchImpl (Ppr x) (f :: PSOPed a f -> Term (PK m) b) = term $ bound "c" do
+    x' <- x
+    var <- getCurrentVar
+    let conNames = SOP.collapse_NP $ SOP.map_NP (SOP.K . T.pack . SOP.constructorName) $ SOP.constructorInfo $ SOP.gdatatypeInfo (Proxy @(a f))
+    xs <-
+      mapM (\x -> runTerm (f . PSOPed . SOP.gto $ sopTo (Proxy @(PK m)) (Proxy @a) x)) . SOP.apInjs_POP $
+        gpAllConProjs (SOP.constructorInfo . SOP.gdatatypeInfo $ Proxy @(a f)) (PprVar var)
+    pure $ PprMatch x' var (zip conNames xs)
 
 gsFindConName :: forall xss' f xss. SOP.NP SOP.ConstructorInfo xss' -> SOP.SOP f xss -> String
 gsFindConName (_ SOP.:* cons) (SOP.SOP (SOP.S next)) = gsFindConName cons (SOP.SOP next)
 gsFindConName (con SOP.:* _) (SOP.SOP (SOP.Z _)) = SOP.constructorName con
 gsFindConName _ _ = undefined
-
--- data ConstEx c xss = forall xss'. ConstEx (c xss')
 
 gpAllConProjs ::
   forall xss' m xss.
@@ -281,16 +273,6 @@ gpAllConProjs info var =
       (\x -> gpAllProjs x var)
     . unsafeCoerce @(SOP.NP (SOP.NP (Const Text)) xss') @(SOP.NP (SOP.NP (Const Text)) xss)
     $ SOP.cmap_NP (Proxy @SOP.SListI) getFieldNames info
-
--- gpAllConProjs info var =
---   SOP.POP $
---     SOP.cana_NP
---       (Proxy @(SOP.All (IsPType (PK m))))
---       ( \(ConstEx fields) -> case fields of
---           SOP.Nil -> undefined
---           f SOP.:* fs -> (gpAllProjs f var, ConstEx fs)
---       )
---       (ConstEx $ SOP.cmap_NP (Proxy @SOP.SListI) getFieldNames info)
 
 getFieldNames :: SOP.SListI xs => SOP.ConstructorInfo xs -> SOP.NP (Const Text) xs
 getFieldNames = \case
@@ -310,15 +292,6 @@ gpAllProjs fields var =
     . unsafeCoerce @(SOP.NP (Const Text) xs') @(SOP.NP (Const Text) xs)
     $ fields
 
--- gpAllProjs fields var =
---   SOP.cana_NP
---     (Proxy @(IsPType (PK m)))
---     ( \(ConstEx fields') -> case fields' of
---         SOP.Nil -> undefined
---         Const f SOP.:* fs -> (pterm $ PprProj var f, ConstEx fs)
---     )
---     (ConstEx fields)
-
 instance (Applicative m) => Semigroup (Term (PK m) (PDiagram d)) where
   l <> r = term $ PprMonCat <$> runTerm l <*> runTerm r
 
@@ -332,8 +305,8 @@ instance (Applicative m) => Monoid (Term (PK m) PValue) where
   mempty = pterm $ PprCall "mempty" []
 
 instance Applicative m => PAp m (PK m) where
-  papr pre x = term $ (ReaderT $ const pre) *> runTerm x
-  papl x aft = term $ runTerm x <* (ReaderT $ const aft)
+  papr pre x = term $ ReaderT (const pre) *> runTerm x
+  papl x aft = term $ runTerm x <* ReaderT (const aft)
 
 instance Monad m => PEmbeds m (PK m) where
   pembed m = term do
@@ -357,11 +330,11 @@ ppr = renderStrict . layoutPretty defaultLayoutOptions {layoutPageWidth = Availa
 
 type PChurch e = (e #-> e) #-> e #-> e
 
-testTerm :: PPSL edsl => Term edsl (ExampleCase #-> PDiagram ExampleDatum)
-testTerm = plam \x -> exampleCases x
+-- testTerm :: PPSL edsl => Term edsl (ExampleCase #-> PDiagram ExampleDatum)
+-- testTerm = plam exampleCases
 
-compiled :: Text
-compiled = runIdentity $ compileSimple testTerm
+-- compiled :: Text
+-- compiled = runIdentity $ compileSimple testTerm
 
 -- >>> compiled
 
@@ -398,13 +371,16 @@ pprTerm = \case
   PprMatch scrut var branches ->
     withPrec 9 $
       nest 2 $
-        "match" <+> pprTerm scrut 0 <+> "as" <+> pprBind var <> line
-          <> ( encloseSep -- match exp as ident
-                "{ "
-                (flatAlt (line <> "}") " }")
-                "; " -- { case A -> ...; case B -> ...; case C -> ... }
-                (map (\(con, body) -> "case" <+> pretty con <+> "->" <> softline <> pprTerm body 1) branches)
-             )
+        "match"
+          <+> pprTerm scrut 0
+          <+> "as"
+          <+> pprBind var
+            <> line
+            <> encloseSep -- match exp as ident
+              "{ "
+              (flatAlt (line <> "}") " }")
+              "; " -- { case A -> ...; case B -> ...; case C -> ... }
+              (map (\(con, body) -> "case" <+> pretty con <+> "->" <> softline <> pprTerm body 1) branches)
   PprProj obj field -> withPrec 11 $ pprTerm obj 11 <> "." <> pretty field
   PprVar var -> const $ pprBind var
   PprTodo sth -> const $ "<" <> pretty sth <> ">"
@@ -435,6 +411,8 @@ instance Monad m => PPSL (PK m) where
     z' <- z
     pure $ PprCall "witnessMint" [x', y', z']
   requireSignature (MkTerm x) = term do
+    -- >>> pprVal $ fst $ compile intTerm
+    -- 7
     x' <- x
     pure $ PprCall "requireSignature" [x']
   requireValidRange (MkTerm x) = term do
@@ -468,6 +446,7 @@ instance Monad m => PPSL (PK m) where
   mkAda (MkTerm x) = term do
     x' <- x
     pure $ PprCall "mkAda" [x']
-  mkOwnValue (MkTerm x) = term do
-    x' <- x
-    pure $ PprCall "mkOwnValue" [x']
+
+-- mkOwnValue (MkTerm x) = term do
+--   x' <- x
+--   pure $ PprCall "mkOwnValue" [x']
