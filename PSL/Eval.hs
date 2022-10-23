@@ -14,9 +14,13 @@ import Data.Proxy (Proxy (Proxy))
 import Data.String (IsString (fromString))
 import Data.Text qualified as T
 import Data.Text.Encoding (encodeUtf8)
+import Generics.SOP (K (K), SOP, unK)
+import Generics.SOP.GGP (gfrom, gto)
+import Generics.SOP.NS (cmap_SOP, ctraverse'_SOP)
 import PSL
 import Plutarch.Core
 import Plutarch.PType
+import Unsafe.Coerce (unsafeCoerce)
 
 data Val
   = VLam (Val -> Val) -- \x. M
@@ -27,6 +31,7 @@ data Val
   | VBS ByteString -- "abc"
   | VList [Val] -- [a, b, c]
   | VUnit -- ()
+  | forall a. PIsSOP EK a => VSOP (Proxy a) (SOP (K Val) (PSOPPTypes EK a))
 
 data Ty
   = TFun Ty Ty -- A -> B
@@ -36,6 +41,7 @@ data Ty
   | TBS -- ByteString
   | TList Ty -- [A]
   | TUnit -- ()
+  | forall a. PIsSOP EK a => TSOP (Proxy a)
 
 intoLam :: Val -> Val -> Val
 intoLam = \case
@@ -103,6 +109,9 @@ instance (TypeInfo a, TypeInfo b) => TypeReprInfo (a #-> b) where
 instance TypeInfo a => TypeReprInfo (PList a) where
   typeReprInfo _ = TList (typeInfo (Proxy @a))
 
+instance PIsSOP EK a => TypeReprInfo (PSOPed a) where
+  typeReprInfo _ = TSOP (Proxy @a)
+
 instance TypeReprInfo PUnit where typeReprInfo _ = TUnit
 instance TypeReprInfo PInteger where typeReprInfo _ = TInt
 instance TypeReprInfo PByteString where typeReprInfo _ = TBS
@@ -162,6 +171,29 @@ instance TypeInfo a => PConstructable' EK (PList a) where
     case xs' of
       [] -> runTerm $ f PNil
       x : xs'' -> runTerm $ f $ PCons (pterm x) (pterm $ VList xs'')
+
+instance
+  PIsSOP EK a =>
+  PConstructable' EK (PSOPed a)
+  where
+  pconImpl (PSOPed x) = Eval do
+    gx <-
+      ctraverse'_SOP (Proxy @(IsPType EK)) (fmap K . unK) $
+        cmap_SOP (Proxy @(IsPType EK)) (K . runTerm) $
+          sopFrom (Proxy @EK) (Proxy @a) $
+            gfrom x
+    pure $ VSOP (Proxy @a) gx
+  pmatchImpl (Eval x) f = term do
+    x >>= \case
+      VSOP _ x' -> do
+        let unGx =
+              gto $
+                sopTo (Proxy @EK) (Proxy @a) $
+                  -- it MUST be this particular type, but we can't possibly know
+                  unsafeCoerce @(SOP (Term EK) _) @(SOP (Term EK) (PSOPPTypes EK a)) $
+                    cmap_SOP (Proxy @(IsPType EK)) (pterm . unK) x'
+        runTerm $ f $ PSOPed unGx
+      _ -> error "absurd: an SOPed is not an SOP"
 
 instance Num (Term EK PInteger) where
   MkTerm x + MkTerm y = term $ VInt <$> liftA2 (+) (intoInt <$> x) (intoInt <$> y)
