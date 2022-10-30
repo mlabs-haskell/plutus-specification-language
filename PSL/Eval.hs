@@ -13,13 +13,16 @@ import Data.Kind (Constraint)
 import Data.Proxy (Proxy (Proxy))
 import Data.String (IsString (fromString))
 import Data.Text qualified as T
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Generics.SOP (K (K), SOP, unK)
 import Generics.SOP.GGP (gfrom, gto)
 import Generics.SOP.NS (cmap_SOP, ctraverse'_SOP)
 import PSL
 import Plutarch.Core
 import Plutarch.PType
+import Prettyprinter (
+  Pretty (pretty),
+ )
 import Unsafe.Coerce (unsafeCoerce)
 
 data Val
@@ -32,6 +35,11 @@ data Val
   | VList [Val] -- [a, b, c]
   | VUnit -- ()
   | forall a. PIsSOP EK a => VSOP (Proxy a) (SOP (K Val) (PSOPPTypes EK a))
+  | VPubKeyHash PubKeyHash
+  | VValidatorHash ValidatorHash
+  | VCurrencySymbol CurrencySymbol
+  | VTokenName TokenName
+  | VAddress Address
 
 data Ty
   = TFun Ty Ty -- A -> B
@@ -42,6 +50,11 @@ data Ty
   | TList Ty -- [A]
   | TUnit -- ()
   | forall a. PIsSOP EK a => TSOP (Proxy a)
+  | TPubKeyHash
+  | TValidatorHash
+  | TCurrencySymbol
+  | TTokenName
+  | TAddress
 
 intoLam :: Val -> Val -> Val
 intoLam = \case
@@ -73,10 +86,30 @@ intoList = \case
   VList xs -> xs
   _ -> error "absurd: a list is not a list"
 
+newtype PubKeyHash = PubKeyHash {unPubKeyHash :: ByteString}
+  deriving stock (Eq, Ord)
+newtype ValidatorHash = ValidatorHash {unValidatorHash :: ByteString}
+  deriving stock (Eq, Ord)
+newtype CurrencySymbol = CurrencySymbol {unCurrencySymbol :: ByteString}
+  deriving stock (Eq, Ord)
+newtype TokenName = TokenName {unTokenName :: ByteString}
+  deriving stock (Eq, Ord)
+data Address = AddrPubKey PubKeyHash | AddrValidator ValidatorHash
+  deriving stock (Eq, Ord)
+
 toHex :: ByteString -> String
 toHex bs = do
   x <- BS.unpack bs
   fmap (intToDigit . fromIntegral) [x `div` 16, x `mod` 16]
+
+instance Pretty PubKeyHash where pretty (PubKeyHash x) = "P@" <> pretty (toHex x)
+instance Pretty ValidatorHash where pretty (ValidatorHash x) = "V@" <> pretty (toHex x)
+instance Pretty CurrencySymbol where pretty (CurrencySymbol x) = "M@" <> pretty (toHex x)
+instance Pretty TokenName where pretty (TokenName x) = "T[" <> pretty (T.unpack $ decodeUtf8 x) <> "]"
+
+instance Pretty Address where
+  pretty (AddrPubKey pkh) = pretty pkh
+  pretty (AddrValidator vh) = pretty vh
 
 type EvalM = Identity
 
@@ -115,6 +148,10 @@ instance PIsSOP EK a => TypeReprInfo (PSOPed a) where
 instance TypeReprInfo PUnit where typeReprInfo _ = TUnit
 instance TypeReprInfo PInteger where typeReprInfo _ = TInt
 instance TypeReprInfo PByteString where typeReprInfo _ = TBS
+instance TypeReprInfo PPubKeyHash where typeReprInfo _ = TPubKeyHash
+instance TypeReprInfo PCurrencySymbol where typeReprInfo _ = TCurrencySymbol
+instance TypeReprInfo PTokenName where typeReprInfo _ = TTokenName
+instance TypeReprInfo PAddress where typeReprInfo _ = TAddress
 
 {-# COMPLETE MkTerm #-}
 pattern MkTerm :: forall a. EvalM Val -> Term EK a
