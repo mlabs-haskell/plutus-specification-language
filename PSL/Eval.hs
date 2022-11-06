@@ -5,11 +5,14 @@
 module PSL.Eval where
 
 import Control.Applicative (Applicative (liftA2))
+import Data.Bifunctor (Bifunctor (bimap))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Char (intToDigit)
 import Data.Functor.Identity (Identity (runIdentity))
 import Data.Kind (Constraint)
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Proxy (Proxy (Proxy))
 import Data.String (IsString (fromString))
 import Data.Text qualified as T
@@ -40,6 +43,8 @@ data Val
   | VCurrencySymbol CurrencySymbol
   | VTokenName TokenName
   | VAddress Address
+  | VValue Value
+  | VData BuiltinData
 
 data Ty
   = TFun Ty Ty -- A -> B
@@ -55,6 +60,8 @@ data Ty
   | TCurrencySymbol
   | TTokenName
   | TAddress
+  | TValue
+  | TData
 
 intoLam :: Val -> Val -> Val
 intoLam = \case
@@ -85,7 +92,17 @@ intoList :: Val -> [Val]
 intoList = \case
   VList xs -> xs
   _ -> error "absurd: a list is not a list"
+intoData :: Val -> BuiltinData
+intoData = \case
+  VData d -> d
+  _ -> error "absurd: a Data is not a Data"
+intoValue :: Val -> Value
+intoValue = \case
+  VValue val -> val
+  _ -> error "absured: a Value is not a Value"
 
+newtype Value = Value {unValue :: Map CurrencySymbol (Map TokenName Integer)}
+  deriving stock (Eq, Ord)
 newtype PubKeyHash = PubKeyHash {unPubKeyHash :: ByteString}
   deriving stock (Eq, Ord)
 newtype ValidatorHash = ValidatorHash {unValidatorHash :: ByteString}
@@ -95,6 +112,13 @@ newtype CurrencySymbol = CurrencySymbol {unCurrencySymbol :: ByteString}
 newtype TokenName = TokenName {unTokenName :: ByteString}
   deriving stock (Eq, Ord)
 data Address = AddrPubKey PubKeyHash | AddrValidator ValidatorHash
+  deriving stock (Eq, Ord)
+data BuiltinData
+  = DataConstr Integer [BuiltinData]
+  | DataMap [(BuiltinData, BuiltinData)]
+  | DataList [BuiltinData]
+  | DataInt Integer
+  | DataBS ByteString
   deriving stock (Eq, Ord)
 
 toHex :: ByteString -> String
@@ -110,6 +134,16 @@ instance Pretty TokenName where pretty (TokenName x) = "T[" <> pretty (T.unpack 
 instance Pretty Address where
   pretty (AddrPubKey pkh) = pretty pkh
   pretty (AddrValidator vh) = pretty vh
+
+instance Semigroup Value where
+  Value xs <> Value ys =
+    Value $
+      Map.filter Map.null $
+        Map.map (Map.filter (== 0)) $
+          Map.unionWith (Map.unionWith (+)) xs ys
+
+instance Monoid Value where
+  mempty = Value Map.empty
 
 type EvalM = Identity
 
@@ -152,6 +186,8 @@ instance TypeReprInfo PPubKeyHash where typeReprInfo _ = TPubKeyHash
 instance TypeReprInfo PCurrencySymbol where typeReprInfo _ = TCurrencySymbol
 instance TypeReprInfo PTokenName where typeReprInfo _ = TTokenName
 instance TypeReprInfo PAddress where typeReprInfo _ = TAddress
+instance TypeReprInfo PValue where typeReprInfo _ = TValue
+instance TypeReprInfo PData where typeReprInfo _ = TData
 
 {-# COMPLETE MkTerm #-}
 pattern MkTerm :: forall a. EvalM Val -> Term EK a
@@ -232,6 +268,33 @@ instance
         runTerm $ f $ PSOPed unGx
       _ -> error "absurd: an SOPed is not an SOP"
 
+instance PConstructable' EK PData where
+  pconImpl x = Eval case x of
+    PDataConstr (MkTerm var) (MkTerm vals) -> do
+      var' <- intoInt <$> var
+      vals' <- intoList <$> vals
+      pure $ VData $ DataConstr var' (intoData <$> vals')
+    PDataMap (MkTerm xs) -> do
+      xs' <- intoList <$> xs
+      pure $ VData $ DataMap (bimap intoData intoData . intoPair <$> xs')
+    PDataList (MkTerm xs) -> do
+      xs' <- intoList <$> xs
+      pure $ VData $ DataList (intoData <$> xs')
+    PDataInteger (MkTerm n) -> do
+      ni <- intoInt <$> n
+      pure $ VData $ DataInt ni
+    PDataByteString (MkTerm bs) -> do
+      bs' <- intoBS <$> bs
+      pure $ VData $ DataBS bs'
+  pmatchImpl (Eval x) f = term do
+    d <- intoData <$> x
+    case d of
+      DataConstr var vals -> runTerm $ f $ PDataConstr (pterm $ VInt var) (pterm $ VList $ fmap VData vals)
+      DataMap xs -> runTerm $ f $ PDataMap (pterm $ VList $ fmap (uncurry VPair . bimap VData VData) xs)
+      DataList xs -> runTerm $ f $ PDataList (pterm $ VList $ fmap VData xs)
+      DataInt n -> runTerm $ f $ PDataInteger (pterm $ VInt n)
+      DataBS bs -> runTerm $ f $ PDataByteString (pterm $ VBS bs)
+
 instance Num (Term EK PInteger) where
   MkTerm x + MkTerm y = term $ VInt <$> liftA2 (+) (intoInt <$> x) (intoInt <$> y)
   MkTerm x - MkTerm y = term $ VInt <$> liftA2 (-) (intoInt <$> x) (intoInt <$> y)
@@ -248,3 +311,9 @@ instance Semigroup (Term EK PByteString) where
 
 instance Monoid (Term EK PByteString) where
   mempty = pterm $ VBS BS.empty
+
+instance Semigroup (Term EK PValue) where
+  MkTerm x <> MkTerm y = term $ VValue <$> liftA2 (<>) (intoValue <$> x) (intoValue <$> y)
+
+instance Monoid (Term EK PValue) where
+  mempty = pterm $ VValue mempty
