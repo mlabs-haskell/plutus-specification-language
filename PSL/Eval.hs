@@ -15,17 +15,32 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Proxy (Proxy (Proxy))
 import Data.String (IsString (fromString))
+import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
-import Generics.SOP (K (K), SOP, unK)
-import Generics.SOP.GGP (gfrom, gto)
-import Generics.SOP.NS (cmap_SOP, ctraverse'_SOP)
+import Generics.SOP (K (K), SOP, constructorInfo, constructorName, datatypeName, unK)
+import Generics.SOP.GGP (gdatatypeInfo, gfrom, gto)
+import Generics.SOP.NP (collapse_NP, map_NP)
+import Generics.SOP.NS (cmap_SOP, collapse_SOP, ctraverse'_SOP, index_SOP)
 import PSL
 import Plutarch.Core
+import Plutarch.Lam
 import Plutarch.PType
 import Prettyprinter (
+  Doc,
+  LayoutOptions (layoutPageWidth),
+  PageWidth (AvailablePerLine),
   Pretty (pretty),
+  brackets,
+  defaultLayoutOptions,
+  dquotes,
+  layoutPretty,
+  parens,
+  sep,
+  (<+>),
  )
+import Prettyprinter qualified as P
+import Prettyprinter.Render.Text (renderStrict)
 import Unsafe.Coerce (unsafeCoerce)
 
 data Val
@@ -317,3 +332,90 @@ instance Semigroup (Term EK PValue) where
 
 instance Monoid (Term EK PValue) where
   mempty = pterm $ VValue mempty
+
+compile :: forall a. IsPType EK a => Term EK a -> (Val, Ty)
+compile v =
+  let val = runIdentity $ runTerm v
+      ty = typeInfo (Proxy @a)
+   in (val, ty)
+
+pprTy :: Ty -> Doc a
+pprTy = \case
+  TFun a b -> parens (pprTy a <+> "->" <+> pprTy b)
+  TProd a b -> parens (pprTy a <> "," <+> pprTy b)
+  TSum a b -> parens (pprTy a <+> "|" <+> pprTy b)
+  TInt -> "Integer"
+  TBS -> "ByteString"
+  TUnit -> "()"
+  TList a -> brackets (pprTy a)
+  TSOP (_ :: Proxy a) -> pretty $ datatypeName $ gdatatypeInfo (Proxy @(PConcrete EK a))
+  TPubKeyHash -> "PubKeyHash"
+  TValidatorHash -> "ValidatorHash"
+  TCurrencySymbol -> "CurrencySymbol"
+  TTokenName -> "TokenName"
+  TAddress -> "Address"
+  TValue -> "Value"
+  TData -> "Data"
+
+pprVal :: Val -> Doc a
+pprVal = \case
+  VLam _ -> "[lambda]"
+  VPair x y -> parens (pprVal x <> "," <+> pprVal y)
+  VLeft x -> parens ("Left" <+> pprVal x)
+  VRight x -> parens ("Right" <+> pprVal x)
+  VInt n -> pretty n
+  VBS bs -> dquotes $ pretty $ decodeUtf8 bs
+  VUnit -> "()"
+  VList xs -> P.list $ fmap pprVal xs
+  VSOP (_ :: Proxy a) x ->
+    let conName =
+          collapse_NP
+            ( map_NP (K . constructorName) $
+                constructorInfo $
+                  gdatatypeInfo $
+                    Proxy @(PConcrete EK a)
+            )
+            !! index_SOP x
+        xs = pprVal <$> collapse_SOP x
+     in if null xs
+          then pretty conName
+          else parens (pretty conName <+> sep xs)
+  VPubKeyHash pkh -> pretty pkh
+  VValidatorHash vh -> pretty vh
+  VCurrencySymbol cs -> pretty cs
+  VTokenName nm -> pretty nm
+  VAddress addr -> pretty addr
+  VValue (Value xss) ->
+    let prettyInner = P.list . fmap (\(tn, x) -> pretty tn <> ":" <+> pretty x) . Map.toList
+        prettyOuter = P.list . fmap (\(cs, xs) -> pretty cs <> ":" <+> prettyInner xs) . Map.toList
+     in "Value" <> prettyOuter xss
+
+docToText :: Doc a -> Text
+docToText = renderStrict . layoutPretty defaultLayoutOptions {layoutPageWidth = AvailablePerLine 120 1.0}
+
+compileShow :: IsPType EK a => Term EK a -> Text
+compileShow = docToText . pprVal . fst . compile
+
+intTerm :: Term EK PInteger
+intTerm = (plam \x -> plam \y -> plam \z -> x * y + z) # 3 # 2 # 1
+
+-- >>> compileShow intTerm
+-- "7"
+
+boolTerm :: Term EK PBool
+boolTerm = pcon PTrue
+
+-- >>> compileShow boolTerm
+-- "PTrue"
+
+bsTerm :: Term EK PByteString
+bsTerm = "hello " <> "world"
+
+-- >>> compileShow bsTerm
+-- "\"hello world\""
+
+pairTerm :: Term EK (PPair PInteger (PPair PBool PByteString))
+pairTerm = pcon (PPair intTerm (pcon $ PPair boolTerm bsTerm))
+
+-- >>> compileShow pairTerm
+-- "(7, (PTrue, \"hello world\"))"
