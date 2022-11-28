@@ -18,10 +18,22 @@ import Data.String (IsString (fromString))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
-import Generics.SOP (K (K), SOP, constructorInfo, constructorName, datatypeName, unK)
+import Generics.SOP (
+  K (K),
+  SOP,
+  constructorInfo,
+  constructorName,
+  datatypeName,
+  unK,
+ )
 import Generics.SOP.GGP (gdatatypeInfo, gfrom, gto)
 import Generics.SOP.NP (collapse_NP, map_NP)
-import Generics.SOP.NS (cmap_SOP, collapse_SOP, ctraverse'_SOP, index_SOP)
+import Generics.SOP.NS (
+  cmap_SOP,
+  collapse_SOP,
+  ctraverse'_SOP,
+  index_SOP,
+ )
 import PSL
 import Plutarch.Core
 import Plutarch.Lam
@@ -59,7 +71,7 @@ data Val
   | VTokenName TokenName
   | VAddress Address
   | VValue Value
-  | VData BuiltinData
+  | VData Data
 
 data Ty
   = TFun Ty Ty -- A -> B
@@ -107,14 +119,14 @@ intoList :: Val -> [Val]
 intoList = \case
   VList xs -> xs
   _ -> error "absurd: a list is not a list"
-intoData :: Val -> BuiltinData
+intoData :: Val -> Data
 intoData = \case
   VData d -> d
   _ -> error "absurd: a Data is not a Data"
 intoValue :: Val -> Value
 intoValue = \case
   VValue val -> val
-  _ -> error "absured: a Value is not a Value"
+  _ -> error "absurd: a Value is not a Value"
 
 newtype Value = Value {unValue :: Map CurrencySymbol (Map TokenName Integer)}
   deriving stock (Eq, Ord)
@@ -128,10 +140,10 @@ newtype TokenName = TokenName {unTokenName :: ByteString}
   deriving stock (Eq, Ord)
 data Address = AddrPubKey PubKeyHash | AddrValidator ValidatorHash
   deriving stock (Eq, Ord)
-data BuiltinData
-  = DataConstr Integer [BuiltinData]
-  | DataMap [(BuiltinData, BuiltinData)]
-  | DataList [BuiltinData]
+data Data
+  = DataConstr Integer [Data]
+  | DataMap [(Data, Data)]
+  | DataList [Data]
   | DataInt Integer
   | DataBS ByteString
   deriving stock (Eq, Ord)
@@ -141,14 +153,21 @@ toHex bs = do
   x <- BS.unpack bs
   fmap (intToDigit . fromIntegral) [x `div` 16, x `mod` 16]
 
-instance Pretty PubKeyHash where pretty (PubKeyHash x) = "P@" <> pretty (toHex x)
-instance Pretty ValidatorHash where pretty (ValidatorHash x) = "V@" <> pretty (toHex x)
-instance Pretty CurrencySymbol where pretty (CurrencySymbol x) = "M@" <> pretty (toHex x)
-instance Pretty TokenName where pretty (TokenName x) = "T[" <> pretty (T.unpack $ decodeUtf8 x) <> "]"
+instance Pretty PubKeyHash where
+  pretty (PubKeyHash x) = parens $ "PubKeyHash" <+> pretty (toHex x)
+
+instance Pretty ValidatorHash where
+  pretty (ValidatorHash x) = parens $ "ValidatorHash" <+> pretty (toHex x)
+
+instance Pretty CurrencySymbol where
+  pretty (CurrencySymbol x) = parens $ "CurrencySymbol" <+> pretty (toHex x)
+
+instance Pretty TokenName where
+  pretty (TokenName x) = parens $ "TokenName" <+> dquotes (pretty $ T.unpack $ decodeUtf8 x)
 
 instance Pretty Address where
-  pretty (AddrPubKey pkh) = pretty pkh
-  pretty (AddrValidator vh) = pretty vh
+  pretty (AddrPubKey pkh) = parens $ "AddrPubKey" <+> parens (pretty pkh)
+  pretty (AddrValidator vh) = parens $ "AddrValidator" <+> parens (pretty vh)
 
 instance Semigroup Value where
   Value xs <> Value ys =
@@ -159,6 +178,22 @@ instance Semigroup Value where
 
 instance Monoid Value where
   mempty = Value Map.empty
+
+instance Pretty Value where
+  pretty (Value xss) =
+    parens $
+      let prettyInner = P.list . fmap (\(tn, x) -> pretty tn <> ":" <+> pretty x) . Map.toList
+          prettyOuter = P.list . fmap (\(cs, xs) -> pretty cs <> ":" <+> prettyInner xs) . Map.toList
+       in "Value" <+> prettyOuter xss
+
+instance Pretty Data where
+  pretty =
+    parens . \case
+      DataConstr n x -> "DataConstr" <+> pretty n <+> pretty x
+      DataMap xs -> "DataMap" <+> P.list (fmap (\(k, v) -> pretty k <> ":" <+> pretty v) xs)
+      DataList xs -> "DataList" <+> pretty xs
+      DataInt n -> "DataInt" <+> pretty n
+      DataBS bs -> "DataBS" <+> dquotes (pretty $ decodeUtf8 bs)
 
 type EvalM = Identity
 
@@ -339,62 +374,60 @@ compile v =
       ty = typeInfo (Proxy @a)
    in (val, ty)
 
-pprTy :: Ty -> Doc a
-pprTy = \case
-  TFun a b -> parens (pprTy a <+> "->" <+> pprTy b)
-  TProd a b -> parens (pprTy a <> "," <+> pprTy b)
-  TSum a b -> parens (pprTy a <+> "|" <+> pprTy b)
-  TInt -> "Integer"
-  TBS -> "ByteString"
-  TUnit -> "()"
-  TList a -> brackets (pprTy a)
-  TSOP (_ :: Proxy a) -> pretty $ datatypeName $ gdatatypeInfo (Proxy @(PConcrete EK a))
-  TPubKeyHash -> "PubKeyHash"
-  TValidatorHash -> "ValidatorHash"
-  TCurrencySymbol -> "CurrencySymbol"
-  TTokenName -> "TokenName"
-  TAddress -> "Address"
-  TValue -> "Value"
-  TData -> "Data"
+instance Pretty Ty where
+  pretty = \case
+    TFun a b -> parens (pretty a <+> "->" <+> pretty b)
+    TProd a b -> parens (pretty a <> "," <+> pretty b)
+    TSum a b -> parens (pretty a <+> "|" <+> pretty b)
+    TInt -> "Integer"
+    TBS -> "ByteString"
+    TUnit -> "()"
+    TList a -> brackets (pretty a)
+    TSOP (_ :: Proxy a) -> pretty $ datatypeName $ gdatatypeInfo (Proxy @(PConcrete EK a))
+    TPubKeyHash -> "PubKeyHash"
+    TValidatorHash -> "ValidatorHash"
+    TCurrencySymbol -> "CurrencySymbol"
+    TTokenName -> "TokenName"
+    TAddress -> "Address"
+    TValue -> "Value"
+    TData -> "Data"
 
-pprVal :: Val -> Doc a
-pprVal = \case
-  VLam _ -> "[lambda]"
-  VPair x y -> parens (pprVal x <> "," <+> pprVal y)
-  VLeft x -> parens ("Left" <+> pprVal x)
-  VRight x -> parens ("Right" <+> pprVal x)
-  VInt n -> pretty n
-  VBS bs -> dquotes $ pretty $ decodeUtf8 bs
-  VUnit -> "()"
-  VList xs -> P.list $ fmap pprVal xs
-  VSOP (_ :: Proxy a) x ->
-    let conName =
-          collapse_NP
-            ( map_NP (K . constructorName) $
-                constructorInfo $
-                  gdatatypeInfo $
-                    Proxy @(PConcrete EK a)
-            )
-            !! index_SOP x
-        xs = pprVal <$> collapse_SOP x
-     in if null xs
-          then pretty conName
-          else parens (pretty conName <+> sep xs)
-  VPubKeyHash pkh -> pretty pkh
-  VValidatorHash vh -> pretty vh
-  VCurrencySymbol cs -> pretty cs
-  VTokenName nm -> pretty nm
-  VAddress addr -> pretty addr
-  VValue (Value xss) ->
-    let prettyInner = P.list . fmap (\(tn, x) -> pretty tn <> ":" <+> pretty x) . Map.toList
-        prettyOuter = P.list . fmap (\(cs, xs) -> pretty cs <> ":" <+> prettyInner xs) . Map.toList
-     in "Value" <> prettyOuter xss
+instance Pretty Val where
+  pretty = \case
+    VLam _ -> "[lambda]"
+    VPair x y -> parens (pretty x <> "," <+> pretty y)
+    VLeft x -> parens ("Left" <+> pretty x)
+    VRight x -> parens ("Right" <+> pretty x)
+    VInt n -> pretty n
+    VBS bs -> dquotes $ pretty $ decodeUtf8 bs
+    VUnit -> "()"
+    VList xs -> P.list $ fmap pretty xs
+    VSOP (_ :: Proxy a) x ->
+      let conName =
+            collapse_NP
+              ( map_NP (K . constructorName) $
+                  constructorInfo $
+                    gdatatypeInfo $
+                      Proxy @(PConcrete EK a)
+              )
+              !! index_SOP x
+          xs = pretty <$> collapse_SOP x
+       in if null xs
+            then pretty conName
+            else parens (pretty conName <+> sep xs)
+    VPubKeyHash pkh -> pretty pkh
+    VValidatorHash vh -> pretty vh
+    VCurrencySymbol cs -> pretty cs
+    VTokenName nm -> pretty nm
+    VAddress addr -> pretty addr
+    VValue val -> pretty val
+    VData dt -> pretty dt
 
 docToText :: Doc a -> Text
 docToText = renderStrict . layoutPretty defaultLayoutOptions {layoutPageWidth = AvailablePerLine 120 1.0}
 
 compileShow :: IsPType EK a => Term EK a -> Text
-compileShow = docToText . pprVal . fst . compile
+compileShow = docToText . pretty . fst . compile
 
 intTerm :: Term EK PInteger
 intTerm = (plam \x -> plam \y -> plam \z -> x * y + z) # 3 # 2 # 1
