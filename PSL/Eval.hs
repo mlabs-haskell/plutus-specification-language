@@ -34,6 +34,7 @@ import Generics.SOP.NS (
   ctraverse'_SOP,
   index_SOP,
  )
+import Numeric.Natural (Natural)
 import PSL
 import Plutarch.Core
 import Plutarch.Lam
@@ -58,10 +59,10 @@ import Unsafe.Coerce (unsafeCoerce)
 data Val
   = VLam (Val -> Val) -- \x. M
   | VPair Val Val -- (x, y)
-  | VLeft Val -- Left x
-  | VRight Val -- Right x
+  | VEither (Either Val Val) -- Left x / Right y
   | VInt Integer -- 123
   | VBS ByteString -- "abc"
+  | VNat Natural
   | VList [Val] -- [a, b, c]
   | VUnit -- ()
   | forall a. PIsSOP EK a => VSOP (Proxy a) (SOP (K Val) (PSOPPTypes EK a))
@@ -79,6 +80,7 @@ data Ty
   | TSum Ty Ty -- A | B
   | TInt -- Integer
   | TBS -- ByteString
+  | TNat -- Natural
   | TList Ty -- [A]
   | TUnit -- ()
   | forall a. PIsSOP EK a => TSOP (Proxy a)
@@ -96,8 +98,7 @@ intoLam = \case
   _ -> error "absurd: a function is not a lambda"
 intoEither :: Val -> Either Val Val
 intoEither = \case
-  VLeft l -> Left l
-  VRight r -> Right r
+  VEither x -> x
   _ -> error "absurd: a sum is not an either"
 intoPair :: Val -> (Val, Val)
 intoPair = \case
@@ -111,6 +112,10 @@ intoBS :: Val -> ByteString
 intoBS = \case
   VBS bs -> bs
   _ -> error "absurd: a bytestring is not a bytestring"
+intoNat :: Val -> Natural
+intoNat = \case
+  VNat n -> n
+  _ -> error "absurd: a nat is not a natural"
 intoUnit :: Val -> ()
 intoUnit = \case
   VUnit -> ()
@@ -232,6 +237,7 @@ instance PIsSOP EK a => TypeReprInfo (PSOPed a) where
 instance TypeReprInfo PUnit where typeReprInfo _ = TUnit
 instance TypeReprInfo PInteger where typeReprInfo _ = TInt
 instance TypeReprInfo PByteString where typeReprInfo _ = TBS
+instance TypeReprInfo PNat where typeReprInfo _ = TNat
 instance TypeReprInfo PPubKeyHash where typeReprInfo _ = TPubKeyHash
 instance TypeReprInfo PCurrencySymbol where typeReprInfo _ = TCurrencySymbol
 instance TypeReprInfo PTokenName where typeReprInfo _ = TTokenName
@@ -266,8 +272,8 @@ instance
   (TypeInfo a, TypeInfo b) =>
   PConstructable' EK (PEither a b)
   where
-  pconImpl (PLeft (MkTerm x)) = Eval $ VLeft <$> x
-  pconImpl (PRight (MkTerm x)) = Eval $ VRight <$> x
+  pconImpl (PLeft (MkTerm x)) = Eval $ VEither . Left <$> x
+  pconImpl (PRight (MkTerm x)) = Eval $ VEither . Right <$> x
   pmatchImpl (Eval sum) f = term do
     sum' <- intoEither <$> sum
     case sum' of
@@ -282,6 +288,17 @@ instance
   pmatchImpl (Eval lam) f = term do
     lam' <- intoLam <$> lam
     runTerm $ f $ PLam \(MkTerm x) -> term $ lam' <$> x
+
+instance PConstructable' EK PNat where
+  pconImpl PZ = Eval $ pure $ VNat 0
+  pconImpl (PS (MkTerm n)) = Eval do
+    n' <- intoNat <$> n
+    pure $ VNat $ n' + 1
+  pmatchImpl (Eval n) f = term do
+    n' <- intoNat <$> n
+    case n' of
+      0 -> runTerm $ f PZ
+      x -> runTerm $ f $ PS (pterm $ VNat $ x - 1)
 
 instance TypeInfo a => PConstructable' EK (PList a) where
   pconImpl PNil = Eval $ pure $ VList []
@@ -381,6 +398,7 @@ instance Pretty Ty where
     TSum a b -> parens (pretty a <+> "|" <+> pretty b)
     TInt -> "Integer"
     TBS -> "ByteString"
+    TNat -> "Natural"
     TUnit -> "()"
     TList a -> brackets (pretty a)
     TSOP (_ :: Proxy a) -> pretty $ datatypeName $ gdatatypeInfo (Proxy @(PConcrete EK a))
@@ -396,11 +414,13 @@ instance Pretty Val where
   pretty = \case
     VLam _ -> "[lambda]"
     VPair x y -> parens (pretty x <> "," <+> pretty y)
-    VLeft x -> parens ("Left" <+> pretty x)
-    VRight x -> parens ("Right" <+> pretty x)
+    VEither et -> case et of
+      Left x -> parens ("Left" <+> pretty x)
+      Right y -> parens ("Right" <+> pretty y)
     VInt n -> pretty n
     VBS bs -> dquotes $ pretty $ decodeUtf8 bs
     VUnit -> "()"
+    VNat n -> pretty n
     VList xs -> P.list $ fmap pretty xs
     VSOP (_ :: Proxy a) x ->
       let conName =
