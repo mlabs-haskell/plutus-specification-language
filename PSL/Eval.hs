@@ -73,6 +73,9 @@ data Val
   | VAddress Address
   | VValue Value
   | VData Data
+  | VUTXORef UTXORef
+  | VUTXO UTXO
+  | VDiagram Diagram
 
 data Ty
   = TFun Ty Ty -- A -> B
@@ -91,6 +94,9 @@ data Ty
   | TAddress
   | TValue
   | TData
+  | TUTXORef
+  | TUTXO
+  | TDiagram Ty
 
 intoLam :: Val -> Val -> Val
 intoLam = \case
@@ -132,6 +138,22 @@ intoValue :: Val -> Value
 intoValue = \case
   VValue val -> val
   _ -> error "absurd: a Value is not a Value"
+intoCurrencySymbol :: Val -> CurrencySymbol
+intoCurrencySymbol = \case
+  VCurrencySymbol val -> val
+  _ -> error "absurd: a CurrencySymbol is not a CurrencySymbol"
+intoTokenName :: Val -> TokenName
+intoTokenName = \case
+  VTokenName val -> val
+  _ -> error "absurd: a TokenName is not a TokenName"
+intoPubKeyHash :: Val -> PubKeyHash
+intoPubKeyHash = \case
+  VPubKeyHash val -> val
+  _ -> error "absurd: a PubKeyHash is not a PubKeyHash"
+intoAddress :: Val -> Address
+intoAddress = \case
+  VAddress val -> val
+  _ -> error "absurd: a Address is not a Address"
 
 newtype Value = Value {unValue :: Map CurrencySymbol (Map TokenName Integer)}
   deriving stock (Eq, Ord)
@@ -152,6 +174,14 @@ data Data
   | DataInt Integer
   | DataBS ByteString
   deriving stock (Eq, Ord)
+newtype UTXORef = UTXORef {unUTXORef :: ByteString}
+  deriving stock (Eq, Ord)
+data UTXO = UTXO
+  { utxoAddress :: Address -- TODO: What about protocols?
+  , utxoValue :: Value
+  , utxoDatum :: Val -- TODO: Both Data and random value are possible
+  }
+data Diagram -- TODO: Finish the diagram type
 
 toHex :: ByteString -> String
 toHex bs = do
@@ -234,6 +264,9 @@ instance TypeInfo a => TypeReprInfo (PList a) where
 instance PIsSOP EK a => TypeReprInfo (PSOPed a) where
   typeReprInfo _ = TSOP (Proxy @a)
 
+instance TypeInfo d => TypeReprInfo (PDiagram d) where
+  typeReprInfo _ = TDiagram (typeInfo (Proxy @d))
+
 instance TypeReprInfo PUnit where typeReprInfo _ = TUnit
 instance TypeReprInfo PInteger where typeReprInfo _ = TInt
 instance TypeReprInfo PByteString where typeReprInfo _ = TBS
@@ -244,6 +277,8 @@ instance TypeReprInfo PTokenName where typeReprInfo _ = TTokenName
 instance TypeReprInfo PAddress where typeReprInfo _ = TAddress
 instance TypeReprInfo PValue where typeReprInfo _ = TValue
 instance TypeReprInfo PData where typeReprInfo _ = TData
+instance TypeReprInfo PUTXO where typeReprInfo _ = TUTXO
+instance TypeReprInfo PUTXORef where typeReprInfo _ = TUTXORef
 
 {-# COMPLETE MkTerm #-}
 pattern MkTerm :: forall a. EvalM Val -> Term EK a
@@ -384,6 +419,36 @@ instance Semigroup (Term EK PValue) where
 
 instance Monoid (Term EK PValue) where
   mempty = pterm $ VValue mempty
+
+-- TODO: Finish Monoid instance of Diagram
+instance Semigroup (Term EK (PDiagram d))
+
+instance Monoid (Term EK (PDiagram d))
+
+adaSymbol :: CurrencySymbol
+adaSymbol = CurrencySymbol BS.empty
+
+adaToken :: TokenName
+adaToken = TokenName BS.empty
+
+instance PPSL EK where
+  toAddress (MkTerm addr) (MkTerm val) (MkTerm dat) = term do
+    addr' <- intoAddress <$> addr
+    val' <- intoValue <$> val
+    dat' <- intoData <$> dat
+    pure $ VUTXO $ UTXO addr' val' (VData dat')
+  fromPkh (MkTerm pkh) = term do
+    pkh' <- intoPubKeyHash <$> pkh
+    pure $ VAddress $ AddrPubKey pkh'
+  emptyValue = pterm $ VValue mempty
+  mkValue (MkTerm cs) (MkTerm tn) (MkTerm n) = term do
+    cs' <- intoCurrencySymbol <$> cs
+    tn' <- intoTokenName <$> tn
+    n' <- intoInt <$> n
+    pure $ VValue $ Value $ Map.singleton cs' $ Map.singleton tn' n'
+  mkAda (MkTerm n) = term do
+    n' <- intoInt <$> n
+    pure $ VValue $ Value $ Map.singleton adaSymbol $ Map.singleton adaToken n'
 
 compile :: forall a. IsPType EK a => Term EK a -> (Val, Ty)
 compile v =
