@@ -7,6 +7,7 @@
 module PSL where
 
 import Data.Proxy (Proxy (Proxy))
+import Data.String (IsString)
 import MonoidDo qualified
 import Plutarch.Core
 import Plutarch.PType
@@ -49,8 +50,6 @@ data PPubKeyHash (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
 data PAddress (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data PDCert (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
-
 data PByteString (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
 data PData (ef :: PTypeF)
@@ -65,8 +64,7 @@ data POwnUTXO d (ef :: PTypeF) = POwnUTXO
   { value :: Pf ef PValue
   , datum :: Pf ef d
   }
-  deriving stock (Generic)
-  deriving anyclass (PHasRepr)
+  deriving (PHasRepr) via PIsPrimitive
 
 data PDiagram (datum :: PType) (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
@@ -84,8 +82,23 @@ data PNat f = PZ | PS (Pf f PNat)
 
 instance PConstructable edsl PNat => Num (Term edsl PNat) where
   fromInteger 0 = pcon PZ
-  fromInteger n | n > 0 = pcon $ PS (fromInteger n)
-  fromInteger _ = error "negative"
+  fromInteger n
+    | n > 0 = pcon $ PS (fromInteger (n - 1))
+    | otherwise = error "Can't construct a negative natural number"
+  m + n = pmatch m \case
+    PZ -> n
+    PS m' -> pcon $ PS $ m' + n
+  m * n = pmatch m \case
+    PZ -> pcon PZ
+    PS m' -> n + m' * n
+  m - n = pmatch m \case
+    PZ -> pcon PZ
+    PS m' -> pmatch n \case
+      PZ -> m
+      PS n' -> m' - n'
+  negate _ = error "Can't negate a natural number"
+  abs = id
+  signum = const 1
 
 class
   ( forall d. Monoid (Term edsl (PDiagram d))
@@ -97,9 +110,11 @@ class
   , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructable' edsl (PEither a b)
   , forall a. (PIsSOP edsl a) => PConstructable' edsl (PSOPed a)
   , PConstructable' edsl PUnit
+  , Num (Term edsl PInteger)
+  , IsString (Term edsl PByteString)
   , IsPType edsl PInteger
-  , -- forall f. PConstructable2 edsl f => PConstructable edsl (PFix f),
-    IsPType edsl PValue
+  , IsPType edsl PByteString
+  , IsPType edsl PValue
   , IsPType edsl PUTXO
   , IsPType edsl PUTXORef
   , IsPType edsl PTokenName
@@ -107,9 +122,9 @@ class
   , IsPType edsl PTimeRange
   , IsPType edsl PPubKeyHash
   , IsPType edsl PAddress
-  , IsPType edsl PDCert
   , PConstructable edsl PNat
   , PConstructable edsl PData
+  , forall d. IsPType edsl d => PConstructable edsl (POwnUTXO d)
   , forall a. IsPType edsl a => PConstructable edsl (PList a)
   ) =>
   PPSL edsl
@@ -127,7 +142,6 @@ class
   witnessMint :: Term edsl PCurrencySymbol -> Term edsl PTokenName -> Term edsl PInteger -> Term edsl (PDiagram d)
   requireSignature :: Term edsl PPubKeyHash -> Term edsl (PDiagram d)
   requireValidRange :: Term edsl PTimeRange -> Term edsl (PDiagram d)
-  requireDCert :: Term edsl PDCert -> Term edsl (PDiagram f)
   toProtocol :: Protocol p d => Proxy p -> Term edsl d -> Term edsl PValue -> Term edsl PUTXO
   toAddress :: Term edsl PAddress -> Term edsl PValue -> Term edsl PData -> Term edsl PUTXO
   fromPkh :: Term edsl PPubKeyHash -> Term edsl PAddress
@@ -148,6 +162,7 @@ data Specification d where
     Specification d
 
 class Protocol p d | p -> d where
+  protocolName :: Proxy p -> String
   specification :: Proxy p -> Specification d
 
 data CounterDatum f = CounterDatum
@@ -178,6 +193,7 @@ counterCases c = pmatch c \case
 data CounterProtocol
 
 instance Protocol CounterProtocol CounterDatum where
+  protocolName _ = "Counter"
   specification _ = Specification @CounterDatum @CounterCase counterCases
 
 data ExampleDatum (ef :: PTypeF) = ExampleDatum (Pf ef PPubKeyHash)
@@ -200,7 +216,8 @@ exampleCases c = pmatch c \case
   ExampleConsume counter value' value pkh otherinput -> MonoidDo.do
     requireOwnInput $ pcon $ POwnUTXO value (pcon $ ExampleDatum pkh)
     requireInput $ otherinput
-    utxoRefIs otherinput $ toProtocol (Proxy @CounterProtocol) (pcon $ CounterDatum counter (fromPkh pkh) undefined) value'
+    utxoRefIs otherinput $ toProtocol (Proxy @CounterProtocol) (pcon $ CounterDatum counter (fromPkh pkh) (pcon $ PDataList $ pcon $ PNil)) value'
+    witnessOutput $ toProtocol (Proxy @CounterProtocol) (pcon $ CounterDatum 5 (fromPkh pkh) (pcon $ PDataList $ pcon $ PNil)) (value' <> value)
 
 -- observeOutput $ undefined (canonical $ Proxy @CounterProtocol) value' (pcon $ CounterDatum 5 pkh)
 
@@ -233,4 +250,5 @@ maksCases c = pmatch c \case
 data MaksProtocol
 
 instance Protocol MaksProtocol MaksDatum where
+  protocolName _ = "Mak's Protocol"
   specification _ = Specification @MaksDatum @MaksCase maksCases
