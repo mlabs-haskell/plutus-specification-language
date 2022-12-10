@@ -14,6 +14,8 @@ import Data.Kind (Constraint)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Proxy (Proxy (Proxy))
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.String (IsString (fromString))
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -75,6 +77,7 @@ data Val
   | VData Data
   | VUTXORef UTXORef
   | VUTXO UTXO
+  | VOwnUTXO OwnUTXO
   | VDiagram Diagram
 
 data Ty
@@ -96,6 +99,7 @@ data Ty
   | TData
   | TUTXORef
   | TUTXO
+  | TOwnUTXO Ty
   | TDiagram Ty
 
 intoLam :: Val -> Val -> Val
@@ -154,8 +158,28 @@ intoAddress :: Val -> Address
 intoAddress = \case
   VAddress val -> val
   _ -> error "absurd: a Address is not a Address"
+intoOwnUTXO :: Val -> OwnUTXO
+intoOwnUTXO = \case
+  VOwnUTXO val -> val
+  _ -> error "absurd: an OwnUTXO is not an OwnUTXO"
+intoDiagram :: Val -> Diagram
+intoDiagram = \case
+  VDiagram val -> val
+  _ -> error "absurd: an Diagram is not an Diagram"
+intoUTXORef :: Val -> UTXORef
+intoUTXORef = \case
+  VUTXORef val -> val
+  _ -> error "absurd: an UTXORef is not an UTXORef"
+intoUTXO :: Val -> UTXO
+intoUTXO = \case
+  VUTXO val -> val
+  _ -> error "absurd: an UTXORef is not an UTXO"
 
-newtype Value = Value {unValue :: Map CurrencySymbol (Map TokenName Integer)}
+data Value = Value
+  { valueAda :: Integer
+  , valueOwn :: Map TokenName Integer
+  , valueOther :: Map CurrencySymbol (Map TokenName Integer)
+  }
   deriving stock (Eq, Ord)
 newtype PubKeyHash = PubKeyHash {unPubKeyHash :: ByteString}
   deriving stock (Eq, Ord)
@@ -176,12 +200,22 @@ data Data
   deriving stock (Eq, Ord)
 newtype UTXORef = UTXORef {unUTXORef :: ByteString}
   deriving stock (Eq, Ord)
-data UTXO = UTXO
-  { utxoAddress :: Address -- TODO: What about protocols?
-  , utxoValue :: Value
-  , utxoDatum :: Val -- TODO: Both Data and random value are possible
+data UTXO
+  = UTXOAddr Address Value Data
+  | UTXOProtocol String Value Val
+data OwnUTXO = OwnUTXO Value Val
+data Diagram = Diagram
+  { diagOwnInputs :: [OwnUTXO]
+  , diagInputs :: Set UTXORef
+  , diagMap :: [(UTXORef, UTXO)]
+  , diagOutputs :: [Output]
+  , diagSign :: Set PubKeyHash
+  , diagMint :: Value
   }
-data Diagram -- TODO: Finish the diagram type
+data Output
+  = OutputWitness UTXO
+  | OutputCreate UTXO
+  | OutputOwn OwnUTXO
 
 toHex :: ByteString -> String
 toHex bs = do
@@ -197,6 +231,9 @@ instance Pretty ValidatorHash where
 instance Pretty CurrencySymbol where
   pretty (CurrencySymbol x) = parens $ "CurrencySymbol" <+> pretty (toHex x)
 
+instance Pretty UTXORef where
+  pretty (UTXORef x) = parens $ "UTXORef" <+> pretty (toHex x)
+
 instance Pretty TokenName where
   pretty (TokenName x) = parens $ "TokenName" <+> dquotes (pretty $ T.unpack $ decodeUtf8 x)
 
@@ -205,21 +242,26 @@ instance Pretty Address where
   pretty (AddrValidator vh) = parens $ "AddrValidator" <+> parens (pretty vh)
 
 instance Semigroup Value where
-  Value xs <> Value ys =
-    Value $
-      Map.filter Map.null $
-        Map.map (Map.filter (== 0)) $
-          Map.unionWith (Map.unionWith (+)) xs ys
+  Value a o xs <> Value a' o' ys =
+    Value
+      (a + a')
+      (Map.filter (== 0) $ Map.unionWith (+) o o')
+      ( Map.filter Map.null $
+          Map.map (Map.filter (== 0)) $
+            Map.unionWith (Map.unionWith (+)) xs ys
+      )
 
 instance Monoid Value where
-  mempty = Value Map.empty
+  mempty = Value 0 Map.empty Map.empty
 
 instance Pretty Value where
-  pretty (Value xss) =
+  pretty (Value a os xss) =
     parens $
-      let prettyInner = P.list . fmap (\(tn, x) -> pretty tn <> ":" <+> pretty x) . Map.toList
-          prettyOuter = P.list . fmap (\(cs, xs) -> pretty cs <> ":" <+> prettyInner xs) . Map.toList
-       in "Value" <+> prettyOuter xss
+      let inner = fmap (\(tn, x) -> pretty tn <> ":" <+> pretty x) . Map.toList
+          outer = fmap (\(cs, xs) -> pretty cs <> ":" <+> P.list (inner xs)) . Map.toList
+          own = "OWN:" <+> P.list (inner os)
+          ada = "ADA:" <+> pretty a
+       in "Value" <+> P.list (ada : own : outer xss)
 
 instance Pretty Data where
   pretty =
@@ -229,6 +271,19 @@ instance Pretty Data where
       DataList xs -> "DataList" <+> pretty xs
       DataInt n -> "DataInt" <+> pretty n
       DataBS bs -> "DataBS" <+> dquotes (pretty $ decodeUtf8 bs)
+
+instance Semigroup Diagram where
+  Diagram ownIns ins inMap outs sign mint <> Diagram ownIns' ins' inMap' outs' sign' mint' =
+    Diagram
+      (ownIns <> ownIns')
+      (ins <> ins')
+      (inMap <> inMap')
+      (outs <> outs')
+      (sign <> sign')
+      (mint <> mint')
+
+instance Monoid Diagram where
+  mempty = Diagram mempty mempty mempty mempty mempty mempty
 
 type EvalM = Identity
 
@@ -263,6 +318,9 @@ instance TypeInfo a => TypeReprInfo (PList a) where
 
 instance PIsSOP EK a => TypeReprInfo (PSOPed a) where
   typeReprInfo _ = TSOP (Proxy @a)
+
+instance TypeInfo d => TypeReprInfo (POwnUTXO d) where
+  typeReprInfo _ = TOwnUTXO (typeInfo (Proxy @d))
 
 instance TypeInfo d => TypeReprInfo (PDiagram d) where
   typeReprInfo _ = TDiagram (typeInfo (Proxy @d))
@@ -370,6 +428,14 @@ instance
         runTerm $ f $ PSOPed unGx
       _ -> error "absurd: an SOPed is not an SOP"
 
+instance IsPType EK d => PConstructable' EK (POwnUTXO d) where
+  pconImpl (POwnUTXO (MkTerm val) (MkTerm dat)) = Eval do
+    val' <- intoValue <$> val
+    VOwnUTXO . OwnUTXO val' <$> dat
+  pmatchImpl (Eval x) f = term do
+    OwnUTXO val dat <- intoOwnUTXO <$> x
+    runTerm $ f $ POwnUTXO (pterm $ VValue val) (pterm dat)
+
 instance PConstructable' EK PData where
   pconImpl x = Eval case x of
     PDataConstr (MkTerm var) (MkTerm vals) -> do
@@ -421,9 +487,11 @@ instance Monoid (Term EK PValue) where
   mempty = pterm $ VValue mempty
 
 -- TODO: Finish Monoid instance of Diagram
-instance Semigroup (Term EK (PDiagram d))
+instance Semigroup (Term EK (PDiagram d)) where
+  MkTerm x <> MkTerm y = term $ VDiagram <$> liftA2 (<>) (intoDiagram <$> x) (intoDiagram <$> y)
 
-instance Monoid (Term EK (PDiagram d))
+instance Monoid (Term EK (PDiagram d)) where
+  mempty = pterm $ VDiagram mempty
 
 adaSymbol :: CurrencySymbol
 adaSymbol = CurrencySymbol BS.empty
@@ -432,23 +500,62 @@ adaToken :: TokenName
 adaToken = TokenName BS.empty
 
 instance PPSL EK where
+  requireInput (MkTerm ref) = term do
+    ref' <- intoUTXORef <$> ref
+    pure $ VDiagram $ mempty {diagInputs = Set.singleton ref'}
+  requireOwnInput (MkTerm utxo) = term do
+    utxo' <- intoOwnUTXO <$> utxo
+    pure $ VDiagram $ mempty {diagOwnInputs = [utxo']}
+  createOwnOutput (MkTerm utxo) = term do
+    utxo' <- intoOwnUTXO <$> utxo
+    pure $ VDiagram $ mempty {diagOutputs = [OutputOwn utxo']}
+  witnessOutput (MkTerm utxo) = term do
+    utxo' <- intoUTXO <$> utxo
+    pure $ VDiagram $ mempty {diagOutputs = [OutputWitness utxo']}
+  createOutput (MkTerm utxo) = term do
+    utxo' <- intoUTXO <$> utxo
+    pure $ VDiagram $ mempty {diagOutputs = [OutputCreate utxo']}
+  mintOwn (MkTerm tn) (MkTerm n) = term do
+    tn' <- intoTokenName <$> tn
+    n' <- intoInt <$> n
+    pure $ VDiagram $ mempty {diagMint = mempty {valueOwn = Map.singleton tn' n'}}
+  witnessMint (MkTerm cs) (MkTerm tn) (MkTerm n) = term do
+    cs' <- intoCurrencySymbol <$> cs
+    tn' <- intoTokenName <$> tn
+    n' <- intoInt <$> n
+    pure $ VDiagram $ mempty {diagMint = mempty {valueOther = Map.singleton cs' $ Map.singleton tn' n'}}
+  requireSignature (MkTerm pkh) = term do
+    pkh' <- intoPubKeyHash <$> pkh
+    pure $ VDiagram $ mempty {diagSign = Set.singleton pkh'}
   toAddress (MkTerm addr) (MkTerm val) (MkTerm dat) = term do
     addr' <- intoAddress <$> addr
     val' <- intoValue <$> val
     dat' <- intoData <$> dat
-    pure $ VUTXO $ UTXO addr' val' (VData dat')
+    pure $ VUTXO $ UTXOAddr addr' val' dat'
+  toProtocol p (MkTerm val) (MkTerm dat) = term do
+    let name = protocolName p
+    val' <- intoValue <$> val
+    VUTXO . UTXOProtocol name val' <$> dat
   fromPkh (MkTerm pkh) = term do
     pkh' <- intoPubKeyHash <$> pkh
     pure $ VAddress $ AddrPubKey pkh'
+  utxoRefIs (MkTerm ref) (MkTerm utxo) = term do
+    ref' <- intoUTXORef <$> ref
+    utxo' <- intoUTXO <$> utxo
+    pure $ VDiagram $ mempty {diagMap = [(ref', utxo')]}
   emptyValue = pterm $ VValue mempty
   mkValue (MkTerm cs) (MkTerm tn) (MkTerm n) = term do
     cs' <- intoCurrencySymbol <$> cs
     tn' <- intoTokenName <$> tn
     n' <- intoInt <$> n
-    pure $ VValue $ Value $ Map.singleton cs' $ Map.singleton tn' n'
+    pure $ VValue $ mempty {valueOther = Map.singleton cs' $ Map.singleton tn' n'}
   mkAda (MkTerm n) = term do
     n' <- intoInt <$> n
-    pure $ VValue $ Value $ Map.singleton adaSymbol $ Map.singleton adaToken n'
+    pure $ VValue $ mempty {valueAda = n'}
+  mkOwnValue (MkTerm tn) (MkTerm n) = term do
+    tn' <- intoTokenName <$> tn
+    n' <- intoInt <$> n
+    pure $ VValue $ mempty {valueOwn = Map.singleton tn' n'}
 
 compile :: forall a. IsPType EK a => Term EK a -> (Val, Ty)
 compile v =
@@ -474,6 +581,10 @@ instance Pretty Ty where
     TAddress -> "Address"
     TValue -> "Value"
     TData -> "Data"
+    TUTXORef -> "UTXORef"
+    TUTXO -> "UTXO"
+    TOwnUTXO d -> parens ("OwnUTXO" <+> pretty d)
+    TDiagram d -> parens ("Diagram" <+> pretty d)
 
 instance Pretty Val where
   pretty = \case
@@ -507,6 +618,7 @@ instance Pretty Val where
     VAddress addr -> pretty addr
     VValue val -> pretty val
     VData dt -> pretty dt
+    VUTXORef ref -> pretty ref
 
 docToText :: Doc a -> Text
 docToText = renderStrict . layoutPretty defaultLayoutOptions {layoutPageWidth = AvailablePerLine 120 1.0}
