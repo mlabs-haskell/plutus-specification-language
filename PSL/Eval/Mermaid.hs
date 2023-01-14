@@ -5,7 +5,6 @@ import Control.Monad.Trans.Class (MonadTrans (lift))
 import Control.Monad.Trans.State.Strict (StateT, evalStateT, state)
 import Control.Monad.Trans.Writer.CPS (Writer, execWriter, tell)
 import Data.Foldable (for_, traverse_)
-import Data.Functor.Identity (Identity (runIdentity))
 import Data.Map.Strict qualified as Map
 import Data.Maybe (maybeToList)
 import Data.Set qualified as Set
@@ -15,7 +14,6 @@ import Data.Traversable (for)
 import PSL (PDiagram)
 import PSL.Eval.Backend
 import PSL.Eval.Interval qualified as Iv
-import PSL.Eval.Tx
 import Plutarch.Core
 import Prettyprinter (Pretty (pretty))
 
@@ -107,12 +105,20 @@ linkLong = link' Nothing 1
 pshow :: Pretty a => a -> Text
 pshow x = docToText $ pretty x
 
+partialDiagram :: (a -> Decl Name) -> Partial a -> Decl Name
+partialDiagram f (PNormal x) = f x
+partialDiagram _ (PNeutral x) = node NProcedure $ pshow x
+
+partialDiagram' :: (a -> Decl v) -> Partial a -> Decl ()
+partialDiagram' f (PNormal x) = void $ f x
+partialDiagram' _ (PNeutral x) = void $ node NProcedure $ pshow x
+
 renderDiagram :: Diagram -> Decl ()
 renderDiagram diag@(Diagram ownIns ins inMap outs _ _ _) =
   flowchart LeftRight do
     txName <- txDiagram diag
     for_ ownIns \utxo -> do
-      utxoName <- ownUTXODiagram utxo
+      utxoName <- partialDiagram ownUTXODiagram utxo
       linkLong utxoName txName
     inRefNames <- for (Set.toList ins) \utxo -> do
       utxoName <- node NAsymmetric $ pshow utxo
@@ -120,50 +126,54 @@ renderDiagram diag@(Diagram ownIns ins inMap outs _ _ _) =
       pure utxoName
     let inRefToNames = Map.fromList $ zip (Set.toList ins) inRefNames
     for_ inMap \(ref, utxo) -> do
-      name <- utxoDiagram "" utxo
+      name <- partialDiagram (utxoDiagram "") utxo
       traverse_ (link name) $ Map.lookup ref inRefToNames
     for_ outs \utxo -> do
-      utxoName <- outputDiagram utxo
+      utxoName <- partialDiagram outputDiagram utxo
       link txName utxoName
 
 outputDiagram :: Output -> Decl Name
-outputDiagram (OutputWitness utxo) = utxoDiagram "Witness: " utxo
-outputDiagram (OutputCreate utxo) = utxoDiagram "Create: " utxo
-outputDiagram (OutputOwn utxo) = ownUTXODiagram utxo
+outputDiagram (OutputWitness utxo) = partialDiagram (utxoDiagram "Witness: ") utxo
+outputDiagram (OutputCreate utxo) = partialDiagram (utxoDiagram "Create: ") utxo
+outputDiagram (OutputOwn utxo) = partialDiagram ownUTXODiagram utxo
 
 txDiagram :: Diagram -> Decl Name
 txDiagram (Diagram _ _ _ _ sign mint tr) = subgraph LeftRight "Transaction" do
   unless (null sign) $ void $ subgraph TopBottom "Signatories" do
     for_ sign (node NAsymmetric . pshow)
-  unless (mint == mempty) $
-    void $
-      subgraph LeftRight "Mint" $
-        valueDiagram mint
-  unless (tr == Iv.always) $ void $ node NRegular $ "ValidRange: " <> pshow tr
+  unless (mint == PNormal mempty) $
+    void . subgraph LeftRight "Mint" $
+      partialDiagram' valueDiagram mint
+  unless (tr == PNormal Iv.always) $
+    void . node NRegular $
+      "ValidRange: " <> pshow tr
 
 ownUTXODiagram :: OwnUTXO -> Decl Name
 ownUTXODiagram (OwnUTXO val dat) = subgraph LeftRight "Own" do
-  node NHexagon $ docToText $ pretty dat
-  valueDiagram val
+  node NHexagon $ pshow dat
+  partialDiagram' valueDiagram val
 
 utxoDiagram :: Text -> UTXO -> Decl Name
 utxoDiagram prefix (UTXOAddr addr val dat) = subgraph LeftRight (prefix <> "Address " <> pshow addr) do
-  node NHexagon $ docToText $ pretty dat
-  valueDiagram val
+  node NHexagon $ pshow dat
+  partialDiagram' valueDiagram val
 utxoDiagram prefix (UTXOProtocol name val dat) = subgraph LeftRight (prefix <> "Protocol " <> pshow name) do
-  node NHexagon $ docToText $ pretty dat
-  valueDiagram val
+  node NHexagon $ pshow dat
+  partialDiagram' valueDiagram val
 
 valueDiagram :: Value -> Decl ()
-valueDiagram (Value ada own others) = do
+valueDiagram v@(Value ada own others) = unless (v == mempty) $ void $ subgraph LeftRight "Values" do
   unless (ada == 0) $ void $ node NRounded $ "ADA: " <> pshow ada
   unless (Map.null own) $ void $ subgraph TopBottom "Own value" do
     for_ (Map.toList own) tokenDiagram
   for_ (Map.toList others) \(cs, subvalue) -> subgraph TopBottom (pshow cs) do
     for_ (Map.toList subvalue) tokenDiagram
 
-tokenDiagram :: (TokenName, Integer) -> Decl Name
+tokenDiagram :: (Partial TokenName, Partial Integer) -> Decl Name
 tokenDiagram (tok, n) = node NRounded $ pshow tok <> ": " <> pshow n
 
-mermaidDiagram :: Term EK (PDiagram d) -> Text
-mermaidDiagram (MkTerm d) = runMermaid $ renderDiagram $ intoDiagram (runIdentity d)
+mermaidDiagram :: Term EK (PDiagram d) -> Maybe Text
+mermaidDiagram (MkTerm d) =
+  runMermaid . renderDiagram <$> case intoDiagram $ runEvalM d of
+    PNeutral _ -> Nothing
+    PNormal n -> Just n

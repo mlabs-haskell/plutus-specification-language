@@ -130,9 +130,9 @@ instance TypeReprInfo m PPubKeyHash where typeReprInfo _ _ = PprName "PubKeyHash
 
 instance TypeReprInfo m PAddress where typeReprInfo _ _ = PprName "Address" []
 
-instance TypeReprInfo m PDCert where typeReprInfo _ _ = PprName "DCert" []
-
 instance TypeReprInfo m PData where typeReprInfo _ _ = PprName "Data" []
+
+instance TypeInfo m d => TypeReprInfo m (POwnUTXO d) where typeReprInfo _ _ = PprName "OwnUTXO" [typeInfo (Proxy @m) (Proxy @d)]
 
 getCurrentVar :: Monad m => PprM m PprBind
 getCurrentVar = do
@@ -254,6 +254,8 @@ instance (Monad m, PIsSOP (PK m) a) => PConstructable' (PK m) (PSOPed a) where
       mapM (\x -> runTerm (f . PSOPed . SOP.gto $ sopTo (Proxy @(PK m)) (Proxy @a) x)) . SOP.apInjs_POP $
         gpAllConProjs (SOP.constructorInfo . SOP.gdatatypeInfo $ Proxy @(a f)) (PprVar var)
     pure $ PprMatch x' var (zip conNames xs)
+
+instance (Monad m, TypeInfo m a) => PConstructable' (PK m) (POwnUTXO a)
 
 gsFindConName :: forall xss' f xss. SOP.NP SOP.ConstructorInfo xss' -> SOP.SOP f xss -> String
 gsFindConName (_ SOP.:* cons) (SOP.SOP (SOP.S next)) = gsFindConName cons (SOP.SOP next)
@@ -418,9 +420,6 @@ instance Monad m => PPSL (PK m) where
   requireValidRange (MkTerm x) = term do
     x' <- x
     pure $ PprCall "requireValidRange" [x']
-  requireDCert (MkTerm x) = term do
-    x' <- x
-    pure $ PprCall "requireDCert" [x']
   toProtocol _ (MkTerm x) (MkTerm y) = term do
     x' <- x
     y' <- y

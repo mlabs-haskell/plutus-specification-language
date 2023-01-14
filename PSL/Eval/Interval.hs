@@ -87,7 +87,7 @@ data Interval a = Interval
   { ivStart :: LowerBound a
   , ivEnd :: UpperBound a
   }
-  deriving stock (Eq, Functor)
+  deriving stock (Eq, Ord, Functor)
 
 instance Pretty a => Pretty (Interval a) where
   pretty (Interval l r) = pretty l <> ", " <> pretty r

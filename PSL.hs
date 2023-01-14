@@ -85,17 +85,9 @@ instance PConstructable edsl PNat => Num (Term edsl PNat) where
   fromInteger n
     | n > 0 = pcon $ PS (fromInteger (n - 1))
     | otherwise = error "Can't construct a negative natural number"
-  m + n = pmatch m \case
-    PZ -> n
-    PS m' -> pcon $ PS $ m' + n
-  m * n = pmatch m \case
-    PZ -> pcon PZ
-    PS m' -> n + m' * n
-  m - n = pmatch m \case
-    PZ -> pcon PZ
-    PS m' -> pmatch n \case
-      PZ -> m
-      PS n' -> m' - n'
+  _ + _ = error "Can't add natural numbers"
+  _ - _ = error "Can't subtract natural numbers"
+  _ * _ = error "Can't multiply natural numbers"
   negate _ = error "Can't negate a natural number"
   abs = id
   signum = const 1
@@ -181,11 +173,8 @@ data CounterCase f where
 
 counterCases :: PPSL edsl => Term edsl CounterCase -> Term edsl (PDiagram CounterDatum)
 counterCases c = pmatch c \case
-  CounterStep datum' value ->
-    pmatch datum' \datum@(CounterDatum counter _ _) ->
-      MonoidDo.do
-        requireOwnInput $ pcon $ POwnUTXO value (pcon $ datum {counter = pcon $ PS counter})
-        createOwnOutput $ pcon $ POwnUTXO value (pcon $ datum)
+  CounterStep datum' value -> MonoidDo.do
+    createOwnOutput $ pcon $ POwnUTXO value datum'
   CounterConsume addr outdatum value -> MonoidDo.do
     requireOwnInput $ pcon $ POwnUTXO value (pcon $ CounterDatum {counter = pcon PZ, addr, datum = outdatum})
     createOutput $ toAddress addr value outdatum
