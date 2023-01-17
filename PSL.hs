@@ -10,8 +10,11 @@ import Data.Proxy (Proxy (Proxy))
 import Data.String (IsString)
 import MonoidDo qualified
 import Plutarch.Core
+import Plutarch.Frontends.Data
 import Plutarch.PType
 import Plutarch.Prelude
+import Plutarch.Repr.Primitive
+import Plutarch.Repr.SOP
 
 data PBool (ef :: PTypeF) = PTrue | PFalse
   deriving stock (Generic)
@@ -53,16 +56,16 @@ data PAddress (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 data PByteString (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
 data PData (ef :: PTypeF)
-  = PDataConstr (Pf ef PInteger) (Pf ef (PList PData))
-  | PDataMap (Pf ef (PList (PPair PData PData)))
-  | PDataList (Pf ef (PList PData))
-  | PDataInteger (Pf ef PInteger)
-  | PDataByteString (Pf ef PByteString)
+  = PDataConstr (ef /$ PInteger) (ef /$ PList PData)
+  | PDataMap (ef /$ PList (PPair PData PData))
+  | PDataList (ef /$ PList PData)
+  | PDataInteger (ef /$ PInteger)
+  | PDataByteString (ef /$ PByteString)
   deriving (PHasRepr) via PIsPrimitive
 
 data POwnUTXO d (ef :: PTypeF) = POwnUTXO
-  { value :: Pf ef PValue
-  , datum :: Pf ef d
+  { value :: ef /$ PValue
+  , datum :: ef /$ d
   }
   deriving (PHasRepr) via PIsPrimitive
 
@@ -77,7 +80,7 @@ data PList a ef
   | PCons (ef /$ a) (ef /$ PList a)
   deriving (PHasRepr) via PIsPrimitive
 
-data PNat f = PZ | PS (Pf f PNat)
+data PNat f = PZ | PS (f /$ PNat)
   deriving (PHasRepr) via PIsPrimitive
 
 instance PConstructable edsl PNat => Num (Term edsl PNat) where
@@ -97,11 +100,11 @@ class
   , (forall d. IsPType edsl d => IsPType edsl (PDiagram d))
   , Monoid (Term edsl PValue)
   , PDSL edsl
-  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructable' edsl (a #-> b)
-  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructable' edsl (PPair a b)
-  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructable' edsl (PEither a b)
-  , forall a. (PIsSOP edsl a) => PConstructable' edsl (PSOPed a)
-  , PConstructable' edsl PUnit
+  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructablePrim edsl (a #-> b)
+  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructablePrim edsl (PPair a b)
+  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructablePrim edsl (PEither a b)
+  , forall a. (PGeneric a) => PConstructablePrim edsl (PSOPed a)
+  , PConstructablePrim edsl PUnit
   , Num (Term edsl PInteger)
   , IsString (Term edsl PByteString)
   , IsPType edsl PInteger
@@ -158,16 +161,16 @@ class Protocol p d | p -> d where
   specification :: Proxy p -> Specification d
 
 data CounterDatum f = CounterDatum
-  { counter :: Pf f PNat
-  , addr :: Pf f PAddress
-  , datum :: Pf f PData
+  { counter :: f /$ PNat
+  , addr :: f /$ PAddress
+  , datum :: f /$ PData
   }
   deriving stock (Generic)
   deriving anyclass (PHasRepr)
 
 data CounterCase f where
-  CounterStep :: Pf f CounterDatum -> Pf f PValue -> CounterCase f
-  CounterConsume :: Pf f PAddress -> Pf f PData -> Pf f PValue -> CounterCase f
+  CounterStep :: f /$ CounterDatum -> f /$ PValue -> CounterCase f
+  CounterConsume :: f /$ PAddress -> f /$ PData -> f /$ PValue -> CounterCase f
   deriving stock (Generic)
   deriving anyclass (PHasRepr)
 
@@ -185,17 +188,17 @@ instance Protocol CounterProtocol CounterDatum where
   protocolName _ = "Counter"
   specification _ = Specification @CounterDatum @CounterCase counterCases
 
-data ExampleDatum (ef :: PTypeF) = ExampleDatum (Pf ef PPubKeyHash)
+data ExampleDatum (ef :: PTypeF) = ExampleDatum (ef /$ PPubKeyHash)
   deriving stock (Generic)
   deriving anyclass (PHasRepr)
 
 data ExampleCase (ef :: PTypeF) where
   ExampleConsume ::
-    Pf ef PNat ->
-    Pf ef PValue ->
-    Pf ef PValue ->
-    Pf ef PPubKeyHash ->
-    Pf ef PUTXORef ->
+    ef /$ PNat ->
+    ef /$ PValue ->
+    ef /$ PValue ->
+    ef /$ PPubKeyHash ->
+    ef /$ PUTXORef ->
     ExampleCase ef
   deriving stock (Generic)
   deriving anyclass (PHasRepr)
@@ -216,17 +219,14 @@ data MaksDatum f = MaksA | MaksB
 
 data MaksCase (ef :: PTypeF) where
   -- given one A, we produce an A and a B
-  MaksFork :: {ada :: Pf ef PInteger, ada' :: Pf ef PInteger} -> MaksCase ef
+  MaksFork :: {ada :: ef /$ PInteger, ada' :: ef /$ PInteger} -> MaksCase ef
   -- given one A and one B, we lock the value of both into the counter protocol
-  MaksConsume :: {ada :: Pf ef PInteger, ada' :: Pf ef PInteger} -> MaksCase ef
+  MaksConsume :: {ada :: ef /$ PInteger, ada' :: ef /$ PInteger} -> MaksCase ef
   deriving stock (Generic)
   deriving anyclass (PHasRepr)
 
-pkh :: Term edsl PPubKeyHash
-pkh = undefined
-
-maksCases :: forall edsl. PPSL edsl => Term edsl MaksCase -> Term edsl (PDiagram MaksDatum)
-maksCases c = pmatch c \case
+maksCases :: forall edsl. PPSL edsl => Term edsl PPubKeyHash -> Term edsl MaksCase -> Term edsl (PDiagram MaksDatum)
+maksCases pkh c = pmatch c \case
   MaksFork {ada, ada'} -> MonoidDo.do
     requireOwnInput $ pcon $ POwnUTXO (mkAda ada) (pcon MaksA)
     createOwnOutput $ pcon $ POwnUTXO (mkAda ada) (pcon MaksA)
@@ -238,6 +238,6 @@ maksCases c = pmatch c \case
 
 data MaksProtocol
 
-instance Protocol MaksProtocol MaksDatum where
-  protocolName _ = "Mak's Protocol"
-  specification _ = Specification @MaksDatum @MaksCase maksCases
+-- instance Protocol MaksProtocol MaksDatum where
+--   protocolName _ = "Mak's Protocol"
+--   specification _ = Specification @MaksDatum @MaksCase maksCases

@@ -11,10 +11,8 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Traversable (for)
-import PSL (PDiagram)
 import PSL.Eval.Backend
 import PSL.Eval.Interval qualified as Iv
-import Plutarch.Core
 import Prettyprinter (Pretty (pretty))
 
 type Decl = StateT Int (Writer Text)
@@ -172,8 +170,6 @@ valueDiagram v@(Value ada own others) = unless (v == mempty) $ void $ subgraph L
 tokenDiagram :: (Partial TokenName, Partial Integer) -> Decl Name
 tokenDiagram (tok, n) = node NRounded $ pshow tok <> ": " <> pshow n
 
-mermaidDiagram :: Term EK (PDiagram d) -> Maybe Text
-mermaidDiagram (MkTerm d) =
-  runMermaid . renderDiagram <$> case intoDiagram $ runEvalM d of
-    PNeutral _ -> Nothing
-    PNormal n -> Just n
+-- | Generate the Mermaid code for a diagram.
+mermaidDiagram :: Diagram -> Text
+mermaidDiagram = runMermaid . renderDiagram

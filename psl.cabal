@@ -64,7 +64,6 @@ library
     PSL.Eval.Interval
     PSL.Eval.Mermaid
     PSL.Eval.Backend
-    PSL.Prettyprint
     MonoidDo
 
   build-depends:

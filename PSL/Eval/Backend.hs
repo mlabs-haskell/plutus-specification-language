@@ -17,6 +17,7 @@ import Data.Bifunctor (Bifunctor (bimap))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Char (intToDigit)
+import Data.Functor.Identity (Identity (Identity))
 import Data.Kind (Constraint)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -34,15 +35,16 @@ import Data.Time.Clock.POSIX (
  )
 import Data.Time.Format.ISO8601 qualified as Time
 import Data.Type.Equality (type (:~:))
-import Generics.SOP (SOP)
+import Generics.SOP (Injection, NP, SOP, injections)
 import Generics.SOP qualified as SOP
 import Generics.SOP.GGP qualified as SOP
-import Generics.SOP.NP (collapse_NP, map_NP)
+import Generics.SOP.NP (cata_NP, collapse_NP, ctraverse'_NP, map_NP, pure_NP, zipWith_NP)
 import Generics.SOP.NS (
-  cmap_SOP,
   collapse_SOP,
-  ctraverse'_SOP,
+  index_NS,
   index_SOP,
+  map_SOP,
+  traverse'_SOP,
  )
 import PSL
 import PSL.Eval.Interval (Interval)
@@ -53,7 +55,9 @@ import PSL.Eval.TH (
   unsound,
  )
 import Plutarch.Core
+import Plutarch.Frontends.Data
 import Plutarch.PType
+import Plutarch.Repr.SOP
 import Prettyprinter (Doc, Pretty (pretty), (<+>))
 import Prettyprinter qualified as P
 import Prettyprinter.Render.Text qualified as P
@@ -77,23 +81,32 @@ takeEvalM = do
   pure (flip evalState st . flip runReaderT env)
 
 -- | A computation that returns an evaluated value.
-newtype Eval ty = Eval {runEval :: EvalM Val}
+newtype Eval ty = Eval (EvalM Val)
 
 -- | The NbE backend.
 type EK = 'PDSLKind Eval
 
 instance PDSL EK where
-  type IsPTypeBackend EK = TypeReprInfo
+  newtype IsPTypePrimData EK _ = PTy Ty
+  newtype PEffect EK a = PEff (Identity a)
+    deriving (Functor, Applicative, Monad) via Identity
+
+unPure :: PEffect EK a -> a
+unPure (PEff (Identity x)) = x
 
 type TypeReprInfo :: forall (a :: PType). PHs a -> Constraint
 class TypeReprInfo ty where
   typeReprInfo :: Proxy ty -> Ty
 
+instance TypeReprInfo ty => IsPTypePrim EK ty where
+  isPTypePrim = PTy (typeReprInfo (Proxy @ty))
+
 class (IsPType EK a) => TypeInfo a
 instance (IsPType EK a) => TypeInfo a
 
 typeInfo :: forall a. TypeInfo a => Proxy a -> Ty
-typeInfo _ = isPType (Proxy @EK) (Proxy @a) typeReprInfo
+typeInfo _ = case isPType @EK @_ @a of
+  IsPTypeData (PTy ty) -> ty
 
 {-# COMPLETE MkTerm #-}
 pattern MkTerm :: forall a. EvalM Val -> Term EK a
@@ -106,8 +119,9 @@ pterm :: Val -> Term EK a
 pterm t = term $ pure t
 
 data Ident
-  = Ident Int Text
-  | IdentU Int
+  = Ident Int Text -- case
+  | IdentU Int -- eta
+  | IdentM Text -- meta
   deriving stock (Eq, Ord)
 
 newtype Uid = Uid Int
@@ -133,8 +147,35 @@ data Spine = Spine Neutral [Val]
 data Projection = Projection Neutral Text
   deriving stock (Eq, Ord)
 
+data SOPChoice xs = SOPChoice (NP (SOP.K Ident) xs) Val
+
+data SOPDec = forall a. PGeneric a => SOPDec (Proxy a) Neutral (NP SOPChoice (PCode a))
+
+instance Eq SOPDec where
+  SOPDec (pa :: Proxy a) nx x == SOPDec (pb :: Proxy b) ny y = case sopEqT pa pb of
+    Left _ -> False
+    Right Refl -> nx == ny && choiceCompare x y == EQ
+
+instance Ord SOPDec where
+  compare (SOPDec (pa :: Proxy a) nx x) (SOPDec (pb :: Proxy b) ny y) = case sopEqT pa pb of
+    Left ord -> ord
+    Right Refl -> case compare nx ny of
+      EQ -> choiceCompare x y
+      x -> x
+
+choiceCompare :: NP SOPChoice xs -> NP SOPChoice xs -> Ordering
+choiceCompare SOP.Nil SOP.Nil = EQ
+choiceCompare (x SOP.:* xs) (y SOP.:* ys) = case comp x y of
+  EQ -> choiceCompare xs ys
+  x -> x
+  where
+    comp (SOPChoice xs vx) (SOPChoice ys vy) = case npCompare xs ys of
+      EQ -> compare vx vy
+      x -> x
+
 data Neutral
   = NDec Decision
+  | NDecSOP SOPDec
   | NProj Projection
   | NSp Spine
   | NId Ident
@@ -197,31 +238,31 @@ instance Eq Lam where
 instance Ord Lam where
   Lam m _ <= Lam n _ = m <= n
 
-data SOPed = forall a. PIsSOP EK a => SOPed (Proxy a) (SOP (SOP.K Val) (PSOPPTypes EK a))
+data SOPed v = forall a. PGeneric a => SOPed (Proxy a) (SOP (SOP.K v) (PCode a))
 
-instance Eq SOPed where
+instance Ord v => Eq (SOPed v) where
   SOPed (pa :: Proxy a) x == SOPed (pb :: Proxy b) y = case sopEqT pa pb of
     Left _ -> False
     Right Refl -> sopCompare x y == EQ
 
-instance Ord SOPed where
+instance Ord v => Ord (SOPed v) where
   compare (SOPed (pa :: Proxy a) x) (SOPed (pb :: Proxy b) y) = case sopEqT pa pb of
     Left ord -> ord
     Right Refl -> sopCompare x y
 
+npCompare :: Ord v => SOP.NP (SOP.K v) a' -> SOP.NP (SOP.K v) a' -> Ordering
+npCompare (x SOP.:* xs) (y SOP.:* ys) = case compare x y of
+  EQ -> npCompare xs ys
+  x -> x
+npCompare SOP.Nil SOP.Nil = EQ
+
 sopCompare :: Ord v => SOP (SOP.K v) a -> SOP (SOP.K v) a -> Ordering
 sopCompare (SOP.SOP (SOP.Z x)) (SOP.SOP (SOP.Z y)) = npCompare x y
-  where
-    npCompare :: Ord v => SOP.NP (SOP.K v) a' -> SOP.NP (SOP.K v) a' -> Ordering
-    npCompare (x SOP.:* xs) (y SOP.:* ys) = case compare x y of
-      EQ -> npCompare xs ys
-      x -> x
-    npCompare SOP.Nil SOP.Nil = EQ
 sopCompare (SOP.SOP (SOP.S x)) (SOP.SOP (SOP.S y)) = sopCompare (SOP.SOP x) (SOP.SOP y)
 sopCompare (SOP.SOP (SOP.Z _)) (SOP.SOP (SOP.S _)) = LT
 sopCompare (SOP.SOP (SOP.S _)) (SOP.SOP (SOP.Z _)) = GT
 
-sopEqT :: forall a b. (PIsSOP EK a, PIsSOP EK b) => Proxy a -> Proxy b -> Either Ordering (a :~: b)
+sopEqT :: forall a b. (PGeneric a, PGeneric b) => Proxy a -> Proxy b -> Either Ordering (a :~: b)
 sopEqT _ _ =
   let infoa = SOP.gdatatypeInfo (Proxy @(PConcrete EK a))
       infob = SOP.gdatatypeInfo (Proxy @(PConcrete EK b))
@@ -243,7 +284,7 @@ data Val
   | VNat Natural
   | VList (List Val) -- [a, b, c]
   | VUnit -- ()
-  | VSOP SOPed
+  | VSOP (SOPed Val)
   | VPubKeyHash PubKeyHash
   | VCurrencySymbol CurrencySymbol
   | VTokenName TokenName
@@ -274,6 +315,8 @@ data Pat
   | MDataList Ident
   | MDataInt Ident
   | MDataBS Ident
+  | -- SOP
+    MSOP (SOPed Ident)
   deriving stock (Eq, Ord)
 
 -- | Type of values.
@@ -286,7 +329,7 @@ data Ty
   | TNat -- Natural
   | TList Ty -- [A]
   | TUnit -- ()
-  | forall a. PIsSOP EK a => TSOP (Proxy a)
+  | forall a. PGeneric a => TSOP (Proxy a)
   | TPubKeyHash
   | TCurrencySymbol
   | TTokenName
@@ -307,10 +350,6 @@ vid = VNeutral . NId
 
 vproj :: Neutral -> Text -> Val
 vproj re field = VNeutral $ NProj $ Projection re field
-
-napp :: Neutral -> Val -> Neutral
-napp (NSp (Spine hd xs)) x = NSp (Spine hd (xs ++ [x]))
-napp neu x = NSp (Spine neu [x])
 
 vapp :: Neutral -> Val -> Val
 vapp (NSp (Spine hd xs)) x = VNeutral $ NSp (Spine hd (xs ++ [x]))
@@ -371,13 +410,13 @@ instance Semigroup Value where
 instance Monoid Value where
   mempty = Value 0 Map.empty Map.empty
 
-newtype PubKeyHash = PubKeyHash {unPubKeyHash :: ByteString}
+newtype PubKeyHash = PubKeyHash ByteString
   deriving stock (Eq, Ord)
 
-newtype CurrencySymbol = CurrencySymbol {unCurrencySymbol :: ByteString}
+newtype CurrencySymbol = CurrencySymbol ByteString
   deriving stock (Eq, Ord)
 
-newtype TokenName = TokenName {unTokenName :: BS}
+newtype TokenName = TokenName BS
   deriving stock (Eq, Ord)
 
 newtype Address = AddrPubKey (Partial PubKeyHash)
@@ -395,7 +434,7 @@ data Data
   | DataBS (Partial BS)
   deriving stock (Eq, Ord)
 
-newtype UTXORef = UTXORef {unUTXORef :: ByteString}
+newtype UTXORef = UTXORef ByteString
   deriving stock (Eq, Ord)
 
 -- | Diagram backend's representation of a non-own UTXO.
@@ -497,7 +536,7 @@ instance (TypeInfo a, TypeInfo b) => TypeReprInfo (a #-> b) where
 instance TypeInfo a => TypeReprInfo (PList a) where
   typeReprInfo _ = TList (typeInfo (Proxy @a))
 
-instance PIsSOP EK a => TypeReprInfo (PSOPed a) where
+instance PGeneric a => TypeReprInfo (PSOPed a) where
   typeReprInfo _ = TSOP (Proxy @a)
 
 instance TypeInfo d => TypeReprInfo (POwnUTXO d) where
@@ -524,13 +563,14 @@ instance TypeReprInfo PTimeRange where typeReprInfo _ = TTimeRange
 -- Construction and elimination ------------------------------------------------
 --------------------------------------------------------------------------------
 
-instance PConstructable' EK PUnit where
+instance PConstructablePrim EK PUnit where
   pconImpl _ = Eval $ pure VUnit
   pmatchImpl _ f = f PUnit
+  pcaseImpl p f = pure $ pmatchImpl p (unPure . f)
 
 instance
   (TypeInfo a, TypeInfo b) =>
-  PConstructable' EK (PPair a b)
+  PConstructablePrim EK (PPair a b)
   where
   pconImpl (PPair (MkTerm x) (MkTerm y)) = Eval $ VPair <$> ((,) <$> x <*> y)
   pmatchImpl (Eval prod) f = term do
@@ -538,10 +578,11 @@ instance
       VPair (x, y) -> runTerm $ f $ PPair (pterm x) (pterm y)
       VNeutral neu -> runTerm $ f $ PPair (pterm $ vproj neu "fst") (pterm $ vproj neu "snd")
       _ -> unsound "Pair"
+  pcaseImpl p f = pure $ pmatchImpl p (unPure . f)
 
 instance
   (TypeInfo a, TypeInfo b) =>
-  PConstructable' EK (PEither a b)
+  PConstructablePrim EK (PEither a b)
   where
   pconImpl (PLeft (MkTerm x)) = Eval $ VEither . Left <$> x
   pconImpl (PRight (MkTerm x)) = Eval $ VEither . Right <$> x
@@ -554,10 +595,11 @@ instance
         caseRight <- withIdent "r" \r -> (MRight r,) <$> runTerm (f $ PRight $ pterm $ vid r)
         pure $ vdec neu [caseLeft, caseRight]
       _ -> unsound "Either"
+  pcaseImpl p f = pure $ pmatchImpl p (unPure . f)
 
 instance
   (TypeInfo a, TypeInfo b) =>
-  PConstructable' EK (a #-> b)
+  PConstructablePrim EK (a #-> b)
   where
   pconImpl (PLam f) = Eval do
     uid <- freshUid
@@ -568,8 +610,9 @@ instance
       VLam (Lam _ lam') -> runTerm $ f $ PLam \(MkTerm x) -> term $ lam' <$> x
       VNeutral neu -> runTerm $ f $ PLam \(MkTerm x) -> term $ vapp neu <$> x
       _ -> unsound "Lambda"
+  pcaseImpl p f = pure $ pmatchImpl p (unPure . f)
 
-instance PConstructable' EK PNat where
+instance PConstructablePrim EK PNat where
   pconImpl PZ = Eval $ pure $ VNat NZ
   pconImpl (PS (MkTerm n)) = Eval $ VNat . NS <$> fmap intoNat n
   pmatchImpl (Eval n) f = term do
@@ -583,8 +626,9 @@ instance PConstructable' EK PNat where
           (MNS n,) <$> runTerm (f $ PS $ pterm $ vid n)
         pure $ vdec neu [caseZero, caseSuc]
       _ -> unsound "Natural"
+  pcaseImpl p f = pure $ pmatchImpl p (unPure . f)
 
-instance TypeInfo a => PConstructable' EK (PList a) where
+instance TypeInfo a => PConstructablePrim EK (PList a) where
   pconImpl PNil = Eval $ pure $ VList LNil
   pconImpl (PCons (MkTerm x) (MkTerm xs)) =
     Eval $ fmap VList $ LCons <$> x <*> (intoList <$> xs)
@@ -599,16 +643,21 @@ instance TypeInfo a => PConstructable' EK (PList a) where
           (MLCons x xs,) <$> runTerm (f $ PCons (pterm $ vid x) (pterm $ vid xs))
         pure $ vdec neu [caseNil, caseCons]
       _ -> unsound "List"
+  pcaseImpl p f = pure $ pmatchImpl p (unPure . f)
+
+newtype WithIdents xs = WithIdents (forall a. (NP (SOP.K Ident) xs -> EvalM a) -> EvalM a)
+
+data HTup f g xs = HTup (f xs) (g xs)
 
 instance
-  PIsSOP EK a =>
-  PConstructable' EK (PSOPed a)
+  PGeneric a =>
+  PConstructablePrim EK (PSOPed a)
   where
   pconImpl (PSOPed x) = Eval do
     gx <-
-      ctraverse'_SOP (Proxy @(IsPType EK)) (fmap SOP.K . SOP.unK) $
-        cmap_SOP (Proxy @(IsPType EK)) (SOP.K . runTerm) $
-          sopFrom (Proxy @EK) (Proxy @a) $
+      traverse'_SOP (fmap SOP.K . SOP.unK) $
+        map_SOP (\(Pf' x) -> SOP.K $ runTerm x) $
+          pgfrom (Proxy @a) (Proxy @(PConcreteEf EK)) $
             SOP.gfrom x
     pure $ VSOP $ SOPed (Proxy @a) gx
   pmatchImpl (Eval x) f = term do
@@ -616,14 +665,41 @@ instance
       VSOP (SOPed _ x') -> do
         let unGx =
               SOP.gto $
-                sopTo (Proxy @EK) (Proxy @a) $
-                  -- it MUST be this particular type, but we can't possibly know
-                  unsafeCoerce @(SOP (Term EK) _) @(SOP (Term EK) (PSOPPTypes EK a)) $
-                    cmap_SOP (Proxy @(IsPType EK)) (pterm . SOP.unK) x'
+                pgto (Proxy @a) (Proxy @(PConcreteEf EK)) $
+                  map_SOP (Pf' . pterm . SOP.unK) $
+                    -- it MUST be this particular type, but we can't possibly know
+                    unsafeCoerce @(SOP (SOP.K Val) _) @(SOP (SOP.K Val) (PCode a)) x'
         runTerm $ f $ PSOPed unGx
+      VNeutral neu -> do
+        let injs = injections @(PCode a)
+        let info = map_NP sopFieldNames $ SOP.constructorInfo $ SOP.gdatatypeInfo (Proxy @(a (PConcreteEf EK)))
+        let zipped = zipWith_NP HTup injs (unsafeCoerce info)
+        x <- flip
+          (ctraverse'_NP (Proxy @SOP.SListI))
+          zipped
+          \(HTup (SOP.Fn inj :: Injection (NP (Pf' (PConcreteEf EK))) (PCode a) xs) fields) -> do
+            let
+              (WithIdents withIdents) =
+                cata_NP @WithIdents
+                  (WithIdents \f -> f SOP.Nil)
+                  (\(SOP.K name) (WithIdents wi) -> WithIdents \f -> withIdent (T.pack name) \x -> wi \xs -> f (SOP.K x SOP.:* xs))
+                  fields
+            withIdents \ids -> do
+              val <-
+                runTerm . f . PSOPed . SOP.gto . pgto (Proxy @a) (Proxy @(PConcreteEf EK)) . SOP.SOP . SOP.unK . inj $
+                  map_NP (\(SOP.K id) -> Pf' $ pterm $ vid id) ids
+              pure $ SOPChoice ids val
+        pure $ VNeutral $ NDecSOP $ SOPDec (Proxy @a) neu x
       _ -> unsound "SOP"
+  pcaseImpl p f = pure $ pmatchImpl p (unPure . f)
 
-instance IsPType EK d => PConstructable' EK (POwnUTXO d) where
+sopFieldNames :: SOP.ConstructorInfo xs -> NP (SOP.K String) xs
+sopFieldNames = \case
+  SOP.Constructor {} -> pure_NP (SOP.K "x")
+  SOP.Infix {} -> SOP.K "lhs" SOP.:* SOP.K "rhs" SOP.:* SOP.Nil
+  SOP.Record _ info -> map_NP (SOP.K . SOP.fieldName) info
+
+instance IsPType EK d => PConstructablePrim EK (POwnUTXO d) where
   pconImpl (POwnUTXO (MkTerm val) (MkTerm dat)) =
     Eval $ fmap VOwnUTXO $ OwnUTXO <$> (intoValue <$> val) <*> dat
   pmatchImpl (Eval x) f = term do
@@ -631,8 +707,9 @@ instance IsPType EK d => PConstructable' EK (POwnUTXO d) where
       VOwnUTXO (OwnUTXO val dat) -> runTerm $ f $ POwnUTXO (pterm $ toVal VValue val) (pterm dat)
       VNeutral neu -> runTerm . f $ POwnUTXO (pterm $ vproj neu "value") (pterm $ vproj neu "datum")
       _ -> unsound "OwnUTXO"
+  pcaseImpl p f = pure $ pmatchImpl p (unPure . f)
 
-instance PConstructable' EK PData where
+instance PConstructablePrim EK PData where
   pconImpl x = Eval $ fmap VData case x of
     PDataConstr (MkTerm var) (MkTerm vals) ->
       DataConstr <$> (intoInt <$> var) <*> (fmap (fmap intoData) . intoList <$> vals)
@@ -665,6 +742,7 @@ instance PConstructable' EK PData where
           (MDataBS bs,) <$> runTerm (f $ PDataByteString (pterm $ vid bs))
         pure $ vdec neu [caseConstr, caseMap, caseList, caseInt, caseBS]
       _ -> unsound "Data"
+  pcaseImpl p f = pure $ pmatchImpl p (unPure . f)
 
 --------------------------------------------------------------------------------
 -- Other typeclass support -----------------------------------------------------
@@ -759,9 +837,6 @@ instance PPSL EK where
 
 prettyChain :: [Doc a] -> Doc a
 prettyChain = P.parens . P.fillSep
-
-prettyList :: [Doc a] -> Doc a
-prettyList = P.group . P.encloseSep (P.flatAlt "[ " "[") (P.flatAlt " ]" "]") ", " . fmap P.align
 
 prettyCon :: Doc a -> [Doc a] -> Doc a
 prettyCon con args = P.group . P.hang 2 . P.parens $ con <> P.line <> P.sep args
@@ -887,6 +962,15 @@ instance Pretty a => Pretty (List a) where
       prettyList xs (LCons x (PNormal rest)) = prettyList (x : xs) rest
       prettyList xs (LCons x (PNeutral neu)) = P.parens $ pretty (x : xs) <+> "++" <+> pretty neu
 
+conNames :: forall a. PGeneric a => Proxy a -> [String]
+conNames _ =
+  collapse_NP
+    ( map_NP (SOP.K . SOP.constructorName) $
+        SOP.constructorInfo $
+          SOP.gdatatypeInfo $
+            Proxy @(PConcrete EK a)
+    )
+
 instance Pretty Val where
   pretty = \case
     VLam (Lam uid f) -> P.hang 2 . P.group . P.parens $ "λ" <> pretty uid <+> "->" <> P.line <> pretty (f $ vid $ uidToIdent uid)
@@ -899,15 +983,8 @@ instance Pretty Val where
     VUnit -> "()"
     VNat n -> pretty n
     VList xs -> pretty xs
-    VSOP (SOPed (_ :: Proxy a) x) ->
-      let conName =
-            collapse_NP
-              ( map_NP (SOP.K . SOP.constructorName) $
-                  SOP.constructorInfo $
-                    SOP.gdatatypeInfo $
-                      Proxy @(PConcrete EK a)
-              )
-              !! index_SOP x
+    VSOP (SOPed (pa :: Proxy a) x) ->
+      let conName = conNames pa !! index_SOP x
           xs = pretty <$> collapse_SOP x
        in if null xs
             then pretty conName
@@ -928,6 +1005,7 @@ instance Pretty Val where
 instance Pretty Ident where
   pretty (Ident 0 nm) = pretty nm
   pretty (Ident ix nm) = pretty nm <> pretty ix
+  pretty (IdentM n) = "?" <> pretty n
   pretty (IdentU n) = "%" <> pretty n
 
 instance Pretty a => Pretty (Partial a) where
@@ -949,6 +1027,12 @@ instance Pretty Pat where
       MDataList x -> ["@List", pretty x]
       MDataInt x -> ["@Int", pretty x]
       MDataBS x -> ["@BS", pretty x]
+      MSOP (SOPed (pa :: Proxy a) sop@(SOP.SOP ns)) ->
+        let
+          conName = conNames pa !! index_NS ns
+          idents = collapse_SOP sop
+         in
+          pretty conName : fmap pretty idents
 
 instance Pretty PrimOp where
   pretty =
@@ -969,19 +1053,25 @@ instance Pretty Neutral where
     NProj (Projection re field) -> pretty re <> "." <> pretty field
     NPrim op -> pretty op
     NDec (Decision scrut match) ->
-      P.hang 2 . P.parens $
-        "case"
-          <+> pretty scrut
-          <+> "of"
-            <> P.line
-            <> P.vsep
-              ( fmap
-                  ( \(pat, val) ->
-                      P.group . P.hang 2 $
-                        pretty pat <+> "->" <> P.line <> pretty val
-                  )
-                  match
+      prettyCaseExpr (pretty scrut) (fmap (bimap pretty pretty) match)
+    NDecSOP (SOPDec (pa :: Proxy a) scrut match) ->
+      let match' = zip (conNames pa) $ collapse_NP $ map_NP (\(SOPChoice idents val) -> SOP.K (collapse_NP idents, val)) match
+       in prettyCaseExpr (pretty scrut) (fmap (\(ctor, (args, val)) -> (pretty ctor <+> P.hsep (fmap pretty args), pretty val)) match')
+
+prettyCaseExpr :: Doc a -> [(Doc a, Doc a)] -> Doc a
+prettyCaseExpr scrut match =
+  P.hang 2 . P.parens $
+    "case"
+      <+> scrut
+      <+> "of"
+        <> P.line
+        <> P.vsep
+          ( fmap
+              ( \(pat, val) ->
+                  P.group . P.hang 2 $ pat <+> "->" <> P.line <> val
               )
+              match
+          )
 
 instance Pretty Uid where
   pretty (Uid n) = pretty n
@@ -1002,5 +1092,34 @@ compileShow = docToText . pretty . fst . compile
 docToText :: Doc a -> Text
 docToText = P.renderStrict . P.layoutPretty P.defaultLayoutOptions {P.layoutPageWidth = P.AvailablePerLine 120 1.0}
 
-toDiagram :: IsPType EK d => Term EK (PDiagram d) -> Partial Diagram
-toDiagram = intoDiagram . fst . compile
+data DecisionTree a
+  = ConcreteDec a
+  | SplitDec Neutral (Map Pat (DecisionTree a))
+  deriving stock (Eq, Ord, Functor)
+
+intoDecisionTree :: Val -> Maybe (DecisionTree Diagram)
+intoDecisionTree = \case
+  VDiagram diag -> Just $ ConcreteDec diag
+  VNeutral neu -> case neu of
+    NDec (Decision scrut match) -> SplitDec scrut <$> traverse intoDecisionTree (Map.fromList match)
+    NDecSOP (SOPDec (proxy :: Proxy a) scrut match) ->
+      SplitDec scrut
+        <$> traverse
+          intoDecisionTree
+          ( Map.fromList
+              $ collapse_NP
+              $ map_NP
+                ( \(HTup (SOP.Fn inj) (SOPChoice idents val)) ->
+                    SOP.K (MSOP (SOPed proxy $ SOP.SOP $ SOP.unK $ inj idents), val)
+                )
+              $ zipWith_NP HTup (injections @(PCode a)) match
+          )
+    _ -> Nothing
+  _ -> Nothing
+
+instance Pretty a => Pretty (DecisionTree a) where
+  pretty (ConcreteDec diag) = pretty diag
+  pretty (SplitDec scrut match) = prettyCaseExpr (pretty scrut) (bimap pretty pretty <$> Map.toList match)
+
+toDecisionTree :: IsPType EK d => Term EK (PDiagram d) -> Maybe (DecisionTree Diagram)
+toDecisionTree = intoDecisionTree . fst . compile
