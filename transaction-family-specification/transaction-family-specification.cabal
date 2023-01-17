@@ -1,0 +1,56 @@
+cabal-version:      2.4
+name:               transaction-family-specification
+version:            0.1.0.0
+
+-- A short (one-line) description of the package.
+-- synopsis:
+
+-- A longer description of the package.
+-- description:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+
+-- The license under which the package is released.
+-- license:
+author:             Mario Blažević
+maintainer:         mario@mlabs.city
+
+-- A copyright notice.
+-- copyright:
+-- category:
+extra-source-files: CHANGELOG.md
+
+library
+  exposed-modules:    Family, Family.Values, Family.Ledger, Family.Diagram, Family.Diagram.TH
+  default-language:   Haskell2010
+  build-depends:      base >= 4.15, bytestring, containers, text, template-haskell >= 2.17, refined,
+                      fgl, graphviz >= 2999.10
+
+executable diagram
+  main-is:            Diagram.lhs
+  other-modules:      Typed, HKD, NFT, Legend
+  hs-source-dirs:     doc
+  ghc-options:        -pgmL markdown-unlit -main-is Diagram
+  build-depends:      base, template-haskell, graphviz, transaction-family-specification
+  build-tool-depends: markdown-unlit:markdown-unlit
+  default-language:   Haskell2010
+
+test-suite doc
+  type:               exitcode-stdio-1.0
+  main-is:            TransactionFamily.lhs
+  hs-source-dirs:     doc
+  other-modules:      Typed, HKD, NFT, Legend, Values
+  ghc-options:        -pgmL markdown-unlit
+  build-depends:      base, bytestring, containers, refined, template-haskell,
+                      graphviz, transaction-family-specification
+  build-tool-depends: markdown-unlit:markdown-unlit
+  default-language:   Haskell2010
+
+test-suite scaffold
+  type:               exitcode-stdio-1.0
+  main-is:            Spec.hs
+  ghc-options:        -main-is Spec
+  hs-source-dirs:     scaffold
+  build-depends:      base, transaction-family-specification
+  default-language:   Haskell2010

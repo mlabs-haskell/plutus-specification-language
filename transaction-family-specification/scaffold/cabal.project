@@ -1,0 +1,13 @@
+index-state: 2022-05-18T00:00:00Z
+
+packages: ./specification.cabal
+
+source-repository-package
+   type: git
+   location: https://github.com/mlabs-haskell/plutus-specification-language
+   tag: 93343414c868dc56aeeec102b274d63c762ef774
+   subdir: transaction-family-specification
+
+allow-newer: graphviz:bytestring
+
+tests: False
