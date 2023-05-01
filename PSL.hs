@@ -55,18 +55,18 @@ data PAddress (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
 data PByteString (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
+data POwnUTXO d (ef :: PTypeF) = POwnUTXO
+  { value :: ef /$ PValue
+  , datum :: ef /$ d
+  }
+  deriving (PHasRepr) via PIsPrimitive
+
 data PData (ef :: PTypeF)
   = PDataConstr (ef /$ PInteger) (ef /$ PList PData)
   | PDataMap (ef /$ PList (PPair PData PData))
   | PDataList (ef /$ PList PData)
   | PDataInteger (ef /$ PInteger)
   | PDataByteString (ef /$ PByteString)
-  deriving (PHasRepr) via PIsPrimitive
-
-data POwnUTXO d (ef :: PTypeF) = POwnUTXO
-  { value :: ef /$ PValue
-  , datum :: ef /$ d
-  }
   deriving (PHasRepr) via PIsPrimitive
 
 data PDiagram (datum :: PType) (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
@@ -160,6 +160,9 @@ class Protocol p d | p -> d where
   protocolName :: Proxy p -> String
   specification :: Proxy p -> Specification d
 
+paymentCases :: PPSL edsl => Term edsl PPubKeyHash -> Term edsl (PDiagram PPubKeyHash)
+paymentCases pkh = requireSignature pkh
+
 data CounterDatum f = CounterDatum
   { counter :: f /$ PNat
   , addr :: f /$ PAddress
@@ -176,42 +179,19 @@ data CounterCase f where
 
 counterCases :: PPSL edsl => Term edsl CounterCase -> Term edsl (PDiagram CounterDatum)
 counterCases c = pmatch c \case
-  CounterStep datum' value -> MonoidDo.do
-    createOwnOutput $ pcon $ POwnUTXO value datum'
+  CounterStep datum' value ->
+    pmatch datum' \datum@(CounterDatum counter _ _) ->
+      MonoidDo.do
+        requireOwnInput $ pcon $ POwnUTXO value (pcon $ datum {counter = pcon $ PS counter})
+        createOwnOutput $ pcon $ POwnUTXO value (pcon datum)
   CounterConsume addr outdatum value -> MonoidDo.do
     requireOwnInput $ pcon $ POwnUTXO value (pcon $ CounterDatum {counter = pcon PZ, addr, datum = outdatum})
     createOutput $ toAddress addr value outdatum
 
 data CounterProtocol
-
 instance Protocol CounterProtocol CounterDatum where
   protocolName _ = "Counter"
   specification _ = Specification @CounterDatum @CounterCase counterCases
-
-data ExampleDatum (ef :: PTypeF) = ExampleDatum (ef /$ PPubKeyHash)
-  deriving stock (Generic)
-  deriving anyclass (PHasRepr)
-
-data ExampleCase (ef :: PTypeF) where
-  ExampleConsume ::
-    ef /$ PNat ->
-    ef /$ PValue ->
-    ef /$ PValue ->
-    ef /$ PPubKeyHash ->
-    ef /$ PUTXORef ->
-    ExampleCase ef
-  deriving stock (Generic)
-  deriving anyclass (PHasRepr)
-
-exampleCases :: PPSL edsl => Term edsl ExampleCase -> Term edsl (PDiagram ExampleDatum)
-exampleCases c = pmatch c \case
-  ExampleConsume counter value' value pkh otherinput -> MonoidDo.do
-    requireOwnInput $ pcon $ POwnUTXO value (pcon $ ExampleDatum pkh)
-    requireInput $ otherinput
-    utxoRefIs otherinput $ toProtocol (Proxy @CounterProtocol) (pcon $ CounterDatum counter (fromPkh pkh) (pcon $ PDataList $ pcon $ PNil)) value'
-    witnessOutput $ toProtocol (Proxy @CounterProtocol) (pcon $ CounterDatum 5 (fromPkh pkh) (pcon $ PDataList $ pcon $ PNil)) (value' <> value)
-
--- observeOutput $ undefined (canonical $ Proxy @CounterProtocol) value' (pcon $ CounterDatum 5 pkh)
 
 data MaksDatum f = MaksA | MaksB
   deriving stock (Generic)
@@ -234,10 +214,4 @@ maksCases pkh c = pmatch c \case
   MaksConsume {ada, ada'} -> MonoidDo.do
     requireOwnInput $ pcon $ POwnUTXO (mkAda ada) (pcon MaksA)
     requireOwnInput $ pcon $ POwnUTXO (mkAda ada') (pcon MaksB)
-    createOutput $ toProtocol (Proxy @CounterProtocol) (pcon $ CounterDatum 100 (fromPkh pkh) (pcon $ PDataList $ pcon $ PNil)) (mkAda ada <> mkAda ada')
-
-data MaksProtocol
-
--- instance Protocol MaksProtocol MaksDatum where
---   protocolName _ = "Mak's Protocol"
---   specification _ = Specification @MaksDatum @MaksCase maksCases
+    createOutput $ toProtocol (Proxy @CounterProtocol) (pcon $ CounterDatum 100 (fromPkh pkh) (pcon $ PDataList $ pcon PNil)) (mkAda ada <> mkAda ada')

@@ -35,10 +35,22 @@ import Data.Time.Clock.POSIX (
  )
 import Data.Time.Format.ISO8601 qualified as Time
 import Data.Type.Equality (type (:~:))
-import Generics.SOP (Injection, NP, SOP, injections)
+import Generics.SOP (
+  Injection,
+  NP,
+  SOP,
+  injections,
+ )
 import Generics.SOP qualified as SOP
 import Generics.SOP.GGP qualified as SOP
-import Generics.SOP.NP (cata_NP, collapse_NP, ctraverse'_NP, map_NP, pure_NP, zipWith_NP)
+import Generics.SOP.NP (
+  cata_NP,
+  collapse_NP,
+  ctraverse'_NP,
+  map_NP,
+  pure_NP,
+  zipWith_NP,
+ )
 import Generics.SOP.NS (
   collapse_SOP,
   index_NS,

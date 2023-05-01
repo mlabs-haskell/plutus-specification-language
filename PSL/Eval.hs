@@ -17,15 +17,17 @@ module PSL.Eval (
   mkTimeRange,
   maks,
   count,
-  example,
+  payment,
   fun,
   ident,
   mermaidDiagram,
   toDecisionTree,
   DecisionTree (..),
+  prettyDiagram,
 ) where
 
 import Data.ByteString (ByteString)
+import Data.Maybe (fromJust)
 import Data.Text (Text)
 import Data.Time.Clock.POSIX (POSIXTime)
 import PSL hiding (counter)
@@ -35,6 +37,7 @@ import PSL.Eval.Mermaid (mermaidDiagram)
 import Plutarch.Core
 import Plutarch.Frontends.Data
 import Plutarch.Prelude
+import Prettyprinter (Pretty (pretty))
 
 -- | Inject a PubKeyHash into the script.
 mkPkh :: ByteString -> Term EK PPubKeyHash
@@ -56,19 +59,23 @@ mkTokenName bs = pterm $ VTokenName $ TokenName $ BS bs
 mkTimeRange :: Interval POSIXTime -> Term EK PTimeRange
 mkTimeRange iv = pterm $ VTimeRange $ fmap EvalTime iv
 
+-- | Inject a metavariable into the script.
+ident :: Text -> Term EK a
+ident nm = pterm $ vid $ IdentM nm
+
+--- Examples ---
+
 maks :: Term EK (PDiagram MaksDatum)
-maks = maksCases (ident "pkh") (ident "datum")
+maks = maksCases (ident "pkh") (ident "redeemer")
 
 count :: Term EK (PDiagram CounterDatum)
-count = counterCases (ident "datum")
+count = counterCases (ident "redeemer")
 
-example :: Term EK (PDiagram ExampleDatum)
-example =
-  exampleCases (ident "datum")
+payment :: Term EK (PDiagram PPubKeyHash)
+payment = paymentCases (ident "pkh")
 
 fun :: Term EK (PInteger #-> PInteger)
 fun = plam \x -> x + 1 * 2
 
--- | Inject a metavariable into the script.
-ident :: Text -> Term EK a
-ident nm = pterm $ vid $ IdentM nm
+prettyDiagram :: IsPType EK d => Term EK (PDiagram d) -> Text
+prettyDiagram x = docToText $ pretty $ fmap mermaidDiagram $ fromJust $ toDecisionTree x
