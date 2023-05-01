@@ -50,17 +50,32 @@ library
 
   ghc-options:
     -Weverything -Wno-unused-do-bind -Wno-missing-kind-signatures
-    -Werror -Wno-implicit-prelude
+    -Wno-implicit-prelude
     -Wno-name-shadowing -Wno-unsafe -Wno-missing-safe-haskell-mode
     -Wno-missing-local-signatures -Wno-prepositive-qualified-module
     -Wno-missing-import-lists -Wno-all-missed-specializations
     -Wno-unticked-promoted-constructors
-    -fprint-explicit-kinds -fprint-explicit-coercions
-    -fprint-equality-relations -fprint-explicit-foralls
+    -fno-show-valid-hole-fits
 
   exposed-modules:
     PSL
+    PSL.Eval
+    PSL.Eval.TH
+    PSL.Eval.Interval
+    PSL.Eval.Mermaid
+    PSL.Eval.Backend
+    MonoidDo
+    UPLC.Backend
 
   build-depends:
     , base
+    , bytestring
+    , containers
+    , generics-sop
     , plutarch-core
+    , prettyprinter
+    , template-haskell
+    , text
+    , time
+    , transformers
+    , plutus-core

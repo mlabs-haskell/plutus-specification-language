@@ -1,245 +1,217 @@
-module PSL (x) where
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
+{-# OPTIONS_GHC -Wno-partial-fields #-}
 
+module PSL where
+
+import Data.Proxy (Proxy (Proxy))
+import Data.String (IsString)
+import MonoidDo qualified
+import Plutarch.Core
+import Plutarch.Frontends.Data
+import Plutarch.PType
 import Plutarch.Prelude
+import Plutarch.Repr.Primitive
+import Plutarch.Repr.SOP
 
-data PBool ef = PTrue | PFalse
+data PBool (ef :: PTypeF) = PTrue | PFalse
   deriving stock (Generic)
   deriving anyclass (PHasRepr)
 
 x :: PConstructable edsl PBool => Term edsl PBool
 x = pcon PTrue
 
-{-
-import Data.Kind (Type)
-import Plutarch.EType
-import Plutarch.Core
-import GHC.Generics (Generic)
-import qualified MonoidDo
-import Data.Proxy (Proxy (Proxy))
+{- | Newtype used to conveniently give a datatype the 'PReprPrimitive'
+ representation. Not intended to be used directly!
 
-data EInteger (ef :: ETypeF)
-instance EIsNewtype EInteger where type EIsNewtype' _ = False
+ @
+ data PSth (ef :: PTypeF) ... deriving (PHasRepr) via PIsPrimitive
+ @
+-}
+data PIsPrimitive (ef :: PTypeF)
 
-data EValue (ef :: ETypeF)
-instance EIsNewtype EValue where type EIsNewtype' _ = False
+instance PHasRepr PIsPrimitive where
+  type PReprSort _ = PReprPrimitive
 
-data EUTXO (ef :: ETypeF)
-instance EIsNewtype EUTXO where type EIsNewtype' _ = False
+data PInteger (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data EUTXORef (ef :: ETypeF)
-instance EIsNewtype EUTXORef where type EIsNewtype' _ = False
+data PValue (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data ETokenName (ef :: ETypeF)
-instance EIsNewtype ETokenName where type EIsNewtype' _ = False
+data PUTXO (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data ECurrencySymbol (ef :: ETypeF)
-instance EIsNewtype ECurrencySymbol where type EIsNewtype' _ = False
+data PUTXORef (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data ETimeRange (ef :: ETypeF)
-instance EIsNewtype ETimeRange where type EIsNewtype' _ = False
+data PTokenName (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data EPubKeyHash (ef :: ETypeF)
-instance EIsNewtype EPubKeyHash where type EIsNewtype' _ = False
+data PCurrencySymbol (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data EAddress (ef :: ETypeF)
-instance EIsNewtype EAddress where type EIsNewtype' _ = False
+data PTimeRange (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data EDCert (ef :: ETypeF)
-instance EIsNewtype EDCert where type EIsNewtype' _ = False
+data PPubKeyHash (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data EByteString (ef :: ETypeF)
-instance EIsNewtype EByteString where type EIsNewtype' _ = False
+data PAddress (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-type EFix :: (EType -> EType) -> EType
-newtype EFix f ef = EFix (Ef ef (f (EFix f)))
-instance EIsNewtype (EFix f) where type EIsNewtype' _ = False
+data PByteString (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-data EListF a self ef
-  = ENil
-  | ECons (Ef ef a) (Ef ef self)
-  deriving stock Generic
-  deriving anyclass EIsNewtype
-
-newtype EList a ef = EList (Ef ef (EFix (EListF a)))
-  deriving stock Generic
-  deriving anyclass EIsNewtype
-
-data EData (ef :: ETypeF)
-  = EDataConstr (Ef ef EInteger) (Ef ef (EList EData))
-  | EDataMap (Ef ef (EList (EPair EData EData)))
-  | EDataList (Ef ef (EList EData))
-  | EDataInteger (Ef ef EInteger)
-  | EDataByteString (Ef ef EByteString)
-instance EIsNewtype EData where type EIsNewtype' _ = False
-
-data EOwnUTXO d f = EOwnUTXO
-  { value :: Ef f EValue
-  , datum :: Ef f d
+data POwnUTXO d (ef :: PTypeF) = POwnUTXO
+  { value :: ef /$ PValue
+  , datum :: ef /$ d
   }
-  deriving stock Generic
-  deriving anyclass EIsNewtype
+  deriving (PHasRepr) via PIsPrimitive
 
-data Undefined = Undefined
+data PData (ef :: PTypeF)
+  = PDataConstr (ef /$ PInteger) (ef /$ PList PData)
+  | PDataMap (ef /$ PList (PPair PData PData))
+  | PDataList (ef /$ PList PData)
+  | PDataInteger (ef /$ PInteger)
+  | PDataByteString (ef /$ PByteString)
+  deriving (PHasRepr) via PIsPrimitive
 
-data EDiagram (datumType :: EType) (ef :: ETypeF)
-instance EIsNewtype (EDiagram d) where type EIsNewtype' _ = False
+data PDiagram (datum :: PType) (ef :: PTypeF) deriving (PHasRepr) via PIsPrimitive
 
-class IsEType' edsl a => IsETypeHelper edsl a
-instance IsEType' edsl a => IsETypeHelper edsl a
+class (forall a. PConstructable edsl a => PConstructable edsl (f a)) => PConstructable2 edsl f
 
-class EConstructable' edsl a => EConstructableHelper edsl a
-instance EConstructable' edsl a => EConstructableHelper edsl a
+instance (forall a. PConstructable edsl a => PConstructable edsl (f a)) => PConstructable2 edsl f
 
-class (forall a. EConstructable edsl a => EConstructable edsl (f a)) => EConstructable2 edsl f
-instance (forall a. EConstructable edsl a => EConstructable edsl (f a)) => EConstructable2 edsl f
+data PList a ef
+  = PNil
+  | PCons (ef /$ a) (ef /$ PList a)
+  deriving (PHasRepr) via PIsPrimitive
+
+data PNat f = PZ | PS (f /$ PNat)
+  deriving (PHasRepr) via PIsPrimitive
+
+instance PConstructable edsl PNat => Num (Term edsl PNat) where
+  fromInteger 0 = pcon PZ
+  fromInteger n
+    | n > 0 = pcon $ PS (fromInteger (n - 1))
+    | otherwise = error "Can't construct a negative natural number"
+  _ + _ = error "Can't add natural numbers"
+  _ - _ = error "Can't subtract natural numbers"
+  _ * _ = error "Can't multiply natural numbers"
+  negate _ = error "Can't negate a natural number"
+  abs = id
+  signum = const 1
 
 class
-  ( forall d. Monoid (Term edsl (EDiagram d))
-  , (forall d. IsEType edsl d => IsETypeHelper edsl (MkETypeRepr (EDiagram d)))
-  , Monoid (Term edsl EValue)
-  , EDSL edsl
-  , ESOP edsl
-  , IsEType' edsl (MkETypeRepr EInteger)
-  , forall f. EConstructable2 edsl f => EConstructableHelper edsl (MkETypeRepr (EFix f))
-  , IsEType' edsl (MkETypeRepr EValue)
-  , IsEType' edsl (MkETypeRepr EUTXO)
-  , IsEType' edsl (MkETypeRepr EUTXORef)
-  , IsEType' edsl (MkETypeRepr ETokenName)
-  , IsEType' edsl (MkETypeRepr ECurrencySymbol)
-  , IsEType' edsl (MkETypeRepr ETimeRange)
-  , IsEType' edsl (MkETypeRepr EPubKeyHash)
-  , IsEType' edsl (MkETypeRepr EAddress)
-  , IsEType' edsl (MkETypeRepr EDCert)
-  , EConstructable' edsl (MkETypeRepr EData)
-  ) => EPSL edsl where
-  requireInput :: Term edsl EUTXORef -> Term edsl (EDiagram d)
-  requireOwnInput :: Term edsl (EOwnUTXO d) -> Term edsl (EDiagram d)
-  createOwnOutput :: Term edsl (EOwnUTXO d) -> Term edsl (EDiagram d)
-  witnessOutput :: Term edsl EUTXO -> Term edsl (EDiagram d)
-  createOutput :: Term edsl EUTXO -> Term edsl (EDiagram d)
-  mintOwn :: Term edsl ETokenName -> Term edsl EInteger -> Term edsl (EDiagram d)
-  witnessMint :: Term edsl ECurrencySymbol -> Term edsl ETokenName -> Term edsl EInteger -> Term edsl (EDiagram d)
-  requireSignature :: Term edsl EPubKeyHash -> Term edsl (EDiagram d)
-  requireValidRange :: Term edsl ETimeRange -> Term edsl (EDiagram d)
-  requireDCert :: Term edsl EDCert -> Term edsl (EDiagram f)
-  toProtocol :: Protocol p d => Proxy p -> Term edsl d -> Term edsl EValue -> Term edsl EUTXO
-  toAddress :: Term edsl EAddress -> Term edsl EValue -> Term edsl EData -> Term edsl EUTXO
-  fromPkh :: Term edsl EPubKeyHash -> Term edsl EAddress
-  utxoRefIs :: Term edsl EUTXORef -> Term edsl EUTXO -> Term edsl (EDiagram d)
-  emptyValue :: Term edsl EValue
-  mkValue :: Term edsl ECurrencySymbol -> Term edsl ETokenName -> Term edsl EInteger -> Term edsl EValue
-  mkAda :: Term edsl EInteger -> Term edsl EValue
-  mkOwnValue :: Term edsl ETokenName -> Term edsl EInteger
+  ( forall d. Monoid (Term edsl (PDiagram d))
+  , (forall d. IsPType edsl d => IsPType edsl (PDiagram d))
+  , Monoid (Term edsl PValue)
+  , PDSL edsl
+  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructablePrim edsl (a #-> b)
+  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructablePrim edsl (PPair a b)
+  , forall a b. (IsPType edsl a, IsPType edsl b) => PConstructablePrim edsl (PEither a b)
+  , forall a. (PGeneric a) => PConstructablePrim edsl (PSOPed a)
+  , PConstructablePrim edsl PUnit
+  , Num (Term edsl PInteger)
+  , IsString (Term edsl PByteString)
+  , IsPType edsl PInteger
+  , IsPType edsl PByteString
+  , IsPType edsl PValue
+  , IsPType edsl PUTXO
+  , IsPType edsl PUTXORef
+  , IsPType edsl PTokenName
+  , IsPType edsl PCurrencySymbol
+  , IsPType edsl PTimeRange
+  , IsPType edsl PPubKeyHash
+  , IsPType edsl PAddress
+  , PConstructable edsl PNat
+  , PConstructable edsl PData
+  , forall d. IsPType edsl d => PConstructable edsl (POwnUTXO d)
+  , forall a. IsPType edsl a => PConstructable edsl (PList a)
+  ) =>
+  PPSL edsl
+  where
+  -- input: WalletInput (pkh, value), ProtocolInput (sh, datum, value), OwnInput (datum, redeemer, value)
+  -- output: WalletOutput (pkh, value), ProtocolOutput (sh, datum, value), OwnOutput (datum, value)
+  -- mint: MintOwn (token, int), Mint (symbol, token, int)
+  -- other: DCert (cert), ValidIn (range), SignedBy (pkh)
+  requireInput :: Term edsl PUTXORef -> Term edsl (PDiagram d)
+  requireOwnInput :: Term edsl (POwnUTXO d) -> Term edsl (PDiagram d)
+  createOwnOutput :: Term edsl (POwnUTXO d) -> Term edsl (PDiagram d)
+  witnessOutput :: Term edsl PUTXO -> Term edsl (PDiagram d)
+  createOutput :: Term edsl PUTXO -> Term edsl (PDiagram d)
+  mintOwn :: Term edsl PTokenName -> Term edsl PInteger -> Term edsl (PDiagram d)
+  witnessMint :: Term edsl PCurrencySymbol -> Term edsl PTokenName -> Term edsl PInteger -> Term edsl (PDiagram d)
+  requireSignature :: Term edsl PPubKeyHash -> Term edsl (PDiagram d)
+  requireValidRange :: Term edsl PTimeRange -> Term edsl (PDiagram d)
+  toProtocol :: Protocol p d => Proxy p -> Term edsl d -> Term edsl PValue -> Term edsl PUTXO
+  toAddress :: Term edsl PAddress -> Term edsl PValue -> Term edsl PData -> Term edsl PUTXO
+  fromPkh :: Term edsl PPubKeyHash -> Term edsl PAddress
+  utxoRefIs :: Term edsl PUTXORef -> Term edsl PUTXO -> Term edsl (PDiagram d)
+  emptyValue :: Term edsl PValue
+  mkValue :: Term edsl PCurrencySymbol -> Term edsl PTokenName -> Term edsl PInteger -> Term edsl PValue
+  mkAda :: Term edsl PInteger -> Term edsl PValue
+  mkOwnValue :: Term edsl PTokenName -> Term edsl PInteger -> Term edsl PValue
 
 data Specification d where
   Specification ::
-    forall d (caseType :: EType).
-    (forall edsl.
-      EPSL edsl =>
+    forall d (caseType :: PType).
+    ( forall edsl.
+      PPSL edsl =>
       Term edsl caseType ->
-      Term edsl (EDiagram d)
-    ) -> Specification d
+      Term edsl (PDiagram d)
+    ) ->
+    Specification d
 
 class Protocol p d | p -> d where
+  protocolName :: Proxy p -> String
   specification :: Proxy p -> Specification d
 
-data ENat f = EZ | ES (Ef f ENat)
-  deriving stock Generic
-  deriving anyclass EIsNewtype
-
-instance EConstructable edsl ENat => Num (Term edsl ENat) where
-  fromInteger 0 = econ EZ
-  fromInteger n | n > 0 = econ $ ES (fromInteger n)
-  fromInteger _ = error "negative"
-
-paymentCases :: EPSL edsl => Term edsl EPubKeyHash -> Term edsl (EDiagram EPubKeyHash)
+paymentCases :: PPSL edsl => Term edsl PPubKeyHash -> Term edsl (PDiagram PPubKeyHash)
 paymentCases pkh = requireSignature pkh
 
-data PaymentProtocol
-instance Protocol PaymentProtocol EPubKeyHash where
-  specification _ = Specification @EPubKeyHash @EPubKeyHash paymentCases
-
---class Implements i p | i -> p where
-
 data CounterDatum f = CounterDatum
-  { counter :: Ef f ENat
-  , addr :: Ef f EAddress
-  , datum :: Ef f EData
+  { counter :: f /$ PNat
+  , addr :: f /$ PAddress
+  , datum :: f /$ PData
   }
-  deriving stock Generic
-  deriving anyclass EIsNewtype
+  deriving stock (Generic)
+  deriving anyclass (PHasRepr)
 
 data CounterCase f where
-  CounterStep :: Ef f CounterDatum -> Ef f EValue -> CounterCase f
-  CounterConsume :: Ef f EAddress -> Ef f EData -> Ef f EValue -> CounterCase f
-  deriving stock Generic
-  deriving anyclass EIsNewtype
+  CounterStep :: f /$ CounterDatum -> f /$ PValue -> CounterCase f
+  CounterConsume :: f /$ PAddress -> f /$ PData -> f /$ PValue -> CounterCase f
+  deriving stock (Generic)
+  deriving anyclass (PHasRepr)
 
-counterCases :: EPSL edsl => Term edsl CounterCase -> Term edsl (EDiagram CounterDatum)
-counterCases c = ematch c \case
+counterCases :: PPSL edsl => Term edsl CounterCase -> Term edsl (PDiagram CounterDatum)
+counterCases c = pmatch c \case
   CounterStep datum' value ->
-    ematch datum' \datum@(CounterDatum counter _ _) ->
-    MonoidDo.do
-      requireOwnInput $ econ $ EOwnUTXO value (econ $ datum { counter = econ $ ES counter })
-      createOwnOutput $ econ $ EOwnUTXO value (econ $ datum)
+    pmatch datum' \datum@(CounterDatum counter _ _) ->
+      MonoidDo.do
+        requireOwnInput $ pcon $ POwnUTXO value (pcon $ datum {counter = pcon $ PS counter})
+        createOwnOutput $ pcon $ POwnUTXO value (pcon datum)
   CounterConsume addr outdatum value -> MonoidDo.do
-    requireOwnInput $ econ $ EOwnUTXO value (econ $ CounterDatum { counter = econ EZ, addr, datum = outdatum })
+    requireOwnInput $ pcon $ POwnUTXO value (pcon $ CounterDatum {counter = pcon PZ, addr, datum = outdatum})
     createOutput $ toAddress addr value outdatum
 
 data CounterProtocol
 instance Protocol CounterProtocol CounterDatum where
+  protocolName _ = "Counter"
   specification _ = Specification @CounterDatum @CounterCase counterCases
 
-data ExampleDatum ef = ExampleDatum (Ef ef EPubKeyHash)
-  deriving stock Generic
-  deriving anyclass EIsNewtype
-
-data ExampleCase ef where
-  ExampleConsume ::
-    Ef ef ENat ->
-    Ef ef EValue ->
-    Ef ef EValue ->
-    Ef ef EPubKeyHash ->
-    Ef ef EUTXORef ->
-    ExampleCase ef
-  deriving stock Generic
-  deriving anyclass EIsNewtype
-
-exampleCases :: EPSL edsl => Term edsl ExampleCase -> Term edsl (EDiagram ExampleDatum)
-exampleCases c = ematch c \case
-  ExampleConsume counter value' value pkh otherinput -> MonoidDo.do
-    requireOwnInput $ econ $ EOwnUTXO value (econ $ ExampleDatum pkh)
-    requireInput $ otherinput
-    utxoRefIs otherinput $ toProtocol (Proxy @CounterProtocol) (econ $ CounterDatum counter (fromPkh pkh) undefined) value'
-    --observeOutput $ undefined (canonical $ Proxy @CounterProtocol) value' (econ $ CounterDatum 5 pkh)
-
 data MaksDatum f = MaksA | MaksB
-  deriving stock Generic
-  deriving anyclass EIsNewtype
+  deriving stock (Generic)
+  deriving anyclass (PHasRepr)
 
-data MaksCase ef where
+data MaksCase (ef :: PTypeF) where
   -- given one A, we produce an A and a B
-  MaksFork :: { ada :: Ef ef EInteger, ada' :: Ef ef EInteger } -> MaksCase ef
+  MaksFork :: {ada :: ef /$ PInteger, ada' :: ef /$ PInteger} -> MaksCase ef
   -- given one A and one B, we lock the value of both into the counter protocol
-  MaksConsume :: { ada :: Ef ef EInteger, ada' :: Ef ef EInteger } -> MaksCase ef
-  deriving stock Generic
-  deriving anyclass EIsNewtype
+  MaksConsume :: {ada :: ef /$ PInteger, ada' :: ef /$ PInteger} -> MaksCase ef
+  deriving stock (Generic)
+  deriving anyclass (PHasRepr)
 
-pkh :: Term edsl EPubKeyHash
-pkh = undefined
-
-maksCases :: forall edsl. EPSL edsl => Term edsl MaksCase -> Term edsl (EDiagram MaksDatum)
-maksCases c = ematch c \case
-  MaksFork { ada, ada' } -> MonoidDo.do
-    requireOwnInput $ econ $ EOwnUTXO (mkAda ada) (econ MaksA)
-    createOwnOutput $ econ $ EOwnUTXO (mkAda ada) (econ MaksA)
-    createOwnOutput $ econ $ EOwnUTXO (mkAda ada') (econ MaksB)
-  MaksConsume { ada, ada' } -> MonoidDo.do
-    requireOwnInput $ econ $ EOwnUTXO (mkAda ada) (econ MaksA)
-    requireOwnInput $ econ $ EOwnUTXO (mkAda ada') (econ MaksB)
-    createOutput $ toProtocol (Proxy @CounterProtocol) (econ $ CounterDatum 100 (fromPkh pkh) (econ $ EDataList $ econ $ EList $ econ $ EFix $ econ ENil)) (mkAda ada <> mkAda ada')
-
-data MaksProtocol
-instance Protocol MaksProtocol MaksDatum where
-  specification _ = Specification @MaksDatum @MaksCase maksCases
--}
+maksCases :: forall edsl. PPSL edsl => Term edsl PPubKeyHash -> Term edsl MaksCase -> Term edsl (PDiagram MaksDatum)
+maksCases pkh c = pmatch c \case
+  MaksFork {ada, ada'} -> MonoidDo.do
+    requireOwnInput $ pcon $ POwnUTXO (mkAda ada) (pcon MaksA)
+    createOwnOutput $ pcon $ POwnUTXO (mkAda ada) (pcon MaksA)
+    createOwnOutput $ pcon $ POwnUTXO (mkAda ada') (pcon MaksB)
+  MaksConsume {ada, ada'} -> MonoidDo.do
+    requireOwnInput $ pcon $ POwnUTXO (mkAda ada) (pcon MaksA)
+    requireOwnInput $ pcon $ POwnUTXO (mkAda ada') (pcon MaksB)
+    createOutput $ toProtocol (Proxy @CounterProtocol) (pcon $ CounterDatum 100 (fromPkh pkh) (pcon $ PDataList $ pcon PNil)) (mkAda ada <> mkAda ada')
