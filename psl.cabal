@@ -65,6 +65,7 @@ library
     PSL.Eval.Mermaid
     PSL.Eval.Backend
     MonoidDo
+    UPLC.Backend
 
   build-depends:
     , base
@@ -77,3 +78,4 @@ library
     , text
     , time
     , transformers
+    , plutus-core
